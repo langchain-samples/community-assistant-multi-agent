@@ -1,41 +1,52 @@
 # Community Assistant: multi-agent reference
 
-A Deep Agents orchestrator that delegates to four subagents. What sits behind each one
-differs: a LangGraph workflow, a prompt with tools, another team's LangGraph server
-(`RemoteGraph`), or an agent on any stack (A2A). Deterministic checks
-(safety, clarification, tool retry) are middleware. All external systems are mocked.
+This is a small community assistant built with Deep Agents. The main agent (the front
+door) hands work off to four subagents, and each one is built differently:
+
+- `knowledge` is a LangGraph workflow that runs in the same process
+- `forum_post` is a regular subagent with a prompt and tools, plus an approval step
+- `support_case` is a LangGraph agent running on its own server, called with `RemoteGraph`
+- `customer_success` is called over A2A, so it could be built with anything
+
+Safety checks, the clarifying question for vague requests, and tool retries are all
+middleware on the front door. Everything external (knowledge base, forum, support cases,
+training catalog) is mocked.
 
 ## Architecture
 
 ![Architecture](docs/img/architecture.svg)
 
-A `UserContext` (roles, entitlements, locale) is passed with every run and
-forwarded across every boundary. Each agent enforces its own rules on it.
+Each run gets a `UserContext` with the user's roles, entitlements and locale. The front
+door passes it along to every subagent, including the remote ones, and each subagent
+applies its own access rules.
 
-## What can sit behind a subagent
+## Choosing how to connect a subagent
 
 | | LangGraph workflow, in process | `RemoteGraph` | A2A |
 |---|---|---|---|
 | Owner | your team | another team | another team or vendor |
-| Other side must run LangGraph | yes, in process | yes | no |
-| Keeps threads and interrupts | yes | yes | no, message in and reply out |
-| Use when | you own the graph and the deploy | the other team runs LangGraph | you can't assume LangGraph |
+| Other side must run LangGraph | yes | yes | no |
+| Keeps threads and interrupts | yes | yes | no, it's one message in and one reply out |
+| Good fit when | you own the code and deploy it together | the other team also uses LangGraph | you can't count on LangGraph on the other side |
 
-## Things worth knowing
+## Notes
 
-- **Context isn't forwarded to a `RemoteGraph` automatically.** `ContextForwardingRemoteGraph`
-  in `front_door/remote_agents.py` forwards it, and gives each delegation its own remote
-  thread so remote approvals can be resumed.
-- **The Agent Server's A2A endpoint takes an assistant UUID, not a graph id.** Set
+- `RemoteGraph` doesn't forward the runtime context for you. `ContextForwardingRemoteGraph`
+  in `front_door/remote_agents.py` sends it explicitly. It also gives each delegation its
+  own remote thread, which is what lets an approval on the remote side be resumed.
+- The Agent Server's A2A endpoint expects an assistant UUID, not the graph name. Set
   `CUSTOMER_SUCCESS_A2A_URL` to the full endpoint.
-- **To join remote runs into the caller's trace,** the remote servers use `tracing.py:make_graph`.
-- **Only tools that are safe to repeat are retried.** A `task` delegation isn't, since it would
-  re-run the subagent's side effects. `customer_success` retries its own A2A call instead.
-- **Identity is passed, not authenticated.** Use Agent Server custom auth in production.
+- The remote servers use `make_graph` from `tracing.py` so their runs show up inside the
+  caller's trace in LangSmith.
+- Only tools that are safe to call twice get retried. The `task` tool isn't one of them,
+  because retrying it would re-run the whole subagent. `customer_success` retries its A2A
+  call itself.
+- User identity is passed in, not authenticated. In production you'd use Agent Server
+  custom auth.
 
-## Run it
+## Running it
 
-Requires Python 3.11+ and [`uv`](https://docs.astral.sh/uv/).
+You'll need Python 3.11+ and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
@@ -43,31 +54,33 @@ cp .env.example .env     # add your model provider key
 make dev-all             # front door :2024, Support Case :2025, Customer Success :2026
 ```
 
-To use a different model, set `COMMUNITY_MODEL` to an `init_chat_model` string. Set
-`COMMUNITY_MODEL_BASE_URL` to route model calls through a gateway. `.env.example`
-lists the rest.
+The model defaults to Claude. To use another one, set `COMMUNITY_MODEL` to an
+`init_chat_model` string, and set `COMMUNITY_MODEL_BASE_URL` if you go through a gateway.
+The other settings are in `.env.example`.
 
 | Command | What it does |
 |---|---|
-| `make test` | unit tests (no model or servers) |
-| `make smoke` | runs the scenarios against the live servers |
+| `make test` | unit tests (no model or servers needed) |
+| `make smoke` | runs the scenarios below against the running servers |
 | `make notebook` | re-runs `demo.ipynb` |
 
 ## Scenarios
 
-`demo.ipynb` walks through these:
+`demo.ipynb` walks through each of these:
 
-1. Knowledge question: subgraph with an entitlement filter
-2. Broad question: clarification interrupt from middleware
-3. Unsafe input: refused by the safety middleware
-4. Forum post: approved before posting
-5. Support case: remote approval through `RemoteGraph`, and a refusal for a user without the role
-6. Training for owned products: over A2A
-7. One question that uses three agents: one connected trace
-8. Self-healing: a tool recovers on retry, and a hard failure gives a localized message
+1. A knowledge question, answered with citations from articles the user can see
+2. A vague question ("Tell me about payroll"), which gets a clarifying question first
+3. An unsafe request, refused by the safety middleware
+4. A forum post, which the user approves before it's posted
+5. Opening a support case: the remote agent asks for approval, and a user without the
+   right role is turned down
+6. Training for the products the user owns, over A2A
+7. One question that needs three subagents, which shows up as a single trace
+8. A search that fails once and recovers on retry, and one that keeps failing and returns
+   a localized error
 
 ## Deploying
 
-Deploy each `langgraph.*.json` as its own LangSmith Deployment. On the front door,
-set `SUPPORT_CASE_URL`, `CUSTOMER_SUCCESS_URL`, `CUSTOMER_SUCCESS_A2A_URL`,
-`LANGSMITH_API_KEY` and `CUSTOMER_SUCCESS_API_KEY`.
+Each `langgraph.*.json` file is its own LangSmith Deployment. On the front door, set
+`SUPPORT_CASE_URL`, `CUSTOMER_SUCCESS_URL`, `CUSTOMER_SUCCESS_A2A_URL`, `LANGSMITH_API_KEY`
+and `CUSTOMER_SUCCESS_API_KEY`.
