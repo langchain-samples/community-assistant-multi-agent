@@ -134,7 +134,7 @@ def test_tool_hard_failure_returns_localized_copy():
 
 def test_only_idempotent_tools_are_retried():
     # ``task`` re-runs a whole subagent (and its side effects), so it is never retried.
-    assert set(RETRIED_TOOLS) == {"flaky_community_search", "ask_customer_success"}
+    assert set(RETRIED_TOOLS) == {"flaky_community_search"}
     assert "task" not in RETRIED_TOOLS
 
 

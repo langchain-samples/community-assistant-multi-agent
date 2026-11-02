@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 import pytest
 from langchain_core.language_models import BaseChatModel
-from langchain.agents import create_agent
+from deepagents import create_deep_agent
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
@@ -32,6 +32,7 @@ from community_assistant.front_door.remote_agents import (
     A2AError,
     RemoteRunIncomplete,
     ask_customer_success,
+    customer_success_subagent,
     fetch_agent_card,
     remote_thread_id,
     support_case_subagent,
@@ -102,14 +103,8 @@ def test_finished_remote_thread_returns_its_reply(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-class _Runtime:
-    def __init__(self, user: str | None):
-        self.context = DEMO_USERS[user] if user else None
-
-
 def _ask_cs(question: str, user: str | None = "admin_customer") -> str:
-    # Call the tool body directly: ToolRuntime is injected by the agent at run time.
-    return ask_customer_success.func(question=question, runtime=_Runtime(user))
+    return ask_customer_success(question, DEMO_USERS[user] if user else None)
 
 
 def _closed_port() -> int:
@@ -231,12 +226,12 @@ def test_a2a_errors_raise_a2a_error(monkeypatch, response):
         _ask_cs("q", "fr_customer")
 
 
-class _OneToolCall(BaseChatModel):
-    """Calls ask_customer_success once, then answers with what the tool returned."""
+class _OneDelegation(BaseChatModel):
+    """Delegates once to the customer_success subagent, then answers with its reply."""
 
     @property
     def _llm_type(self) -> str:
-        return "one-tool-call"
+        return "one-delegation"
 
     def bind_tools(self, tools, **kwargs: Any):
         return self
@@ -245,38 +240,59 @@ class _OneToolCall(BaseChatModel):
         if messages[-1].type == "tool":
             reply = AIMessage(content=messages[-1].text)
         else:
-            call = {"name": "ask_customer_success", "args": {"question": "q"}, "id": "c1"}
-            reply = AIMessage(content="", tool_calls=[call])
+            args = {"description": "What training is available?", "subagent_type": "customer_success"}
+            reply = AIMessage(content="", tool_calls=[{"name": "task", "args": args, "id": "c1"}])
         return ChatResult(generations=[ChatGeneration(message=reply)])
+
+
+def _cs_front_door():
+    return create_deep_agent(
+        model=_OneDelegation(),
+        subagents=[customer_success_subagent()],
+        middleware=front_door_middleware(),
+        context_schema=UserContext,
+    )
+
+
+def test_a2a_subagent_sends_the_delegated_question_with_user_context(monkeypatch):
+    seen = _mock_a2a(monkeypatch, lambda r: _rpc(result=_task("completed", artifact_text="TR-HCM-101")))
+    out = _cs_front_door().invoke(
+        {"messages": [HumanMessage("training?")]}, context=DEMO_USERS["partner_readonly"]
+    )
+    assert out["messages"][-1].text == "TR-HCM-101"
+    params = json.loads(seen[0].content)["params"]
+    assert params["message"]["parts"][0]["text"] == "What training is available?"
+    assert params["context"]["user_id"] == DEMO_USERS["partner_readonly"].user_id
 
 
 def test_a2a_failure_is_retried_once_then_localized_by_middleware(monkeypatch):
     seen = _mock_a2a(monkeypatch, lambda r: httpx.Response(503, text="unavailable"))
-    agent = create_agent(
-        _OneToolCall(),
-        tools=[ask_customer_success],
-        middleware=front_door_middleware(),
-        context_schema=UserContext,
+    out = _cs_front_door().invoke(
+        {"messages": [HumanMessage("training?")]}, context=DEMO_USERS["fr_customer"]
     )
-    out = agent.invoke({"messages": [HumanMessage("training?")]}, context=DEMO_USERS["fr_customer"])
-    assert len(seen) == 2  # first call + one retry
+    assert len(seen) == 2  # first call + one retry inside the subagent
     tool_message = next(m for m in out["messages"] if isinstance(m, ToolMessage))
     assert tool_message.content == FAILURE_COPY["fr_FR"]
     assert "503" not in out["messages"][-1].text
 
 
-def test_a2a_recovers_on_retry(monkeypatch):
+def test_a2a_recovers_on_retry_async(monkeypatch):
     responses = iter([httpx.Response(503), _rpc(result=_task("completed", artifact_text="TR-HCM-101"))])
     seen = _mock_a2a(monkeypatch, lambda r: next(responses))
-    agent = create_agent(
-        _OneToolCall(),
-        tools=[ask_customer_success],
-        middleware=front_door_middleware(),
-        context_schema=UserContext,
+    out = asyncio.run(
+        _cs_front_door().ainvoke(
+            {"messages": [HumanMessage("training?")]}, context=DEMO_USERS["admin_customer"]
+        )
     )
-    out = agent.invoke({"messages": [HumanMessage("training?")]}, context=DEMO_USERS["admin_customer"])
     assert len(seen) == 2
     assert out["messages"][-1].text == "TR-HCM-101"
+
+
+def test_a2a_subagent_without_user_context_fails_closed(monkeypatch):
+    seen = _mock_a2a(monkeypatch, lambda r: httpx.Response(500))
+    out = _cs_front_door().invoke({"messages": [HumanMessage("training?")]})
+    assert out["messages"][-1].text == FAILURE_COPY["en_US"]
+    assert seen == []
 
 
 def test_a2a_without_user_context_fails_closed(monkeypatch):
@@ -306,10 +322,10 @@ def test_a2a_forwards_tracing_headers_when_a_run_is_active(monkeypatch):
     assert "langsmith-trace" not in seen[1].headers
 
 
-def test_ask_customer_success_is_a_tool_with_only_question_exposed():
-    assert ask_customer_success.name == "ask_customer_success"
-    schema = ask_customer_success.tool_call_schema.model_json_schema()
-    assert list(schema["properties"]) == ["question"]
+def test_customer_success_is_a_compiled_subagent():
+    subagent = customer_success_subagent()
+    assert subagent["name"] == "customer_success"
+    assert "training" in subagent["description"].lower()
 
 
 def test_a2a_api_key_header_only_when_configured(monkeypatch):

@@ -124,7 +124,7 @@ def s5_support_case(c: Check) -> None:
 def s6_training(c: Check) -> None:
     t = run_turn("What training is available for the products we own?", scenario="6-training-a2a")
     c.finished(t, "answer")
-    c.that("ask_customer_success" in t.calls, "asked Customer Success over A2A", t)
+    c.that("task:customer_success" in t.calls, "asked Customer Success over A2A", t)
     c.that(any(title in t.answer for title in HCM_TRAINING), "mentions an HCM training title", t)
 
 
@@ -135,7 +135,7 @@ def s7_connected(c: Check) -> None:
         scenario="7-connected-trace",
     )
     c.finished(t, "answer")
-    for call in ("task:support_case", "task:knowledge", "ask_customer_success"):
+    for call in ("task:support_case", "task:knowledge", "task:customer_success"):
         c.that(call in t.calls, f"called {call}", t)
     c.that("waiting on acme" in t.answer.lower(), "gives the case status", t)
     c.that("Sources:" in t.answer, "keeps the `Sources:` list", t)

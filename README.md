@@ -1,21 +1,20 @@
 # Community Assistant: multi-agent reference
 
-A Deep Agents orchestrator that calls other agents in three ways: as a compiled
-subgraph, through `RemoteGraph` to another server, and over A2A. Deterministic checks
+A Deep Agents orchestrator that delegates to four subagents. What sits behind each one
+differs: a LangGraph workflow, a prompt with tools, another team's LangGraph server
+(`RemoteGraph`), or an agent on any stack (A2A). Deterministic checks
 (safety, clarification, tool retry) are middleware. All external systems are mocked.
 
 ## Architecture
 
 ![Architecture](docs/img/architecture.svg)
 
-Source: `docs/img/architecture.mmd`.
-
 A `UserContext` (roles, entitlements, locale) is passed with every run and
 forwarded across every boundary. Each agent enforces its own rules on it.
 
-## Which way to call another agent
+## What can sit behind a subagent
 
-| | Subgraph | `RemoteGraph` | A2A |
+| | LangGraph workflow, in process | `RemoteGraph` | A2A |
 |---|---|---|---|
 | Owner | your team | another team | another team or vendor |
 | Other side must run LangGraph | yes, in process | yes | no |
@@ -30,7 +29,8 @@ forwarded across every boundary. Each agent enforces its own rules on it.
 - **The Agent Server's A2A endpoint takes an assistant UUID, not a graph id.** Set
   `CUSTOMER_SUCCESS_A2A_URL` to the full endpoint.
 - **To join remote runs into the caller's trace,** the remote servers use `tracing.py:make_graph`.
-- **Only tools that are safe to repeat are retried.** Subagent delegations aren't retried.
+- **Only tools that are safe to repeat are retried.** A `task` delegation isn't, since it would
+  re-run the subagent's side effects. `customer_success` retries its own A2A call instead.
 - **Identity is passed, not authenticated.** Use Agent Server custom auth in production.
 
 ## Run it

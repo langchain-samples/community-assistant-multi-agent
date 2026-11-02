@@ -34,9 +34,10 @@ from community_assistant.localization import REFUSAL_COPY, failure_message
 logger = logging.getLogger(__name__)
 
 # Tools that are safe to call twice. A ``task`` delegation is not: it re-runs a whole
-# subagent (and its side effects, such as an approval or a created case). Other tools
-# still get the localized failure message, just without a retry.
-RETRIED_TOOLS = ("flaky_community_search", "ask_customer_success")
+# subagent (and its side effects, such as an approval or a created case), so a
+# subagent retries inside itself if it's safe to. Other tools still get the localized
+# failure message, just without a retry.
+RETRIED_TOOLS = ("flaky_community_search",)
 
 UNSAFE_PATTERNS = ("ignore previous instructions", "social security number", "how do i hack")
 BROAD_TOPICS = ("payroll", "benefits", "hcm", "financials", "acme")

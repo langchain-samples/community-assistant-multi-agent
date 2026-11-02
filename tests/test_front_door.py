@@ -40,7 +40,8 @@ def test_front_door_builds_with_all_subagents():
     model = RecordingFake(responses=[AIMessage(content="hi")], bound=[], descriptions={})
     graph = build_front_door(model, support_case=_stub_support_case())
     graph.invoke({"messages": [HumanMessage("hello")]}, context=DEMO_USERS["admin_customer"])
-    assert {"task", "ask_customer_success", "flaky_community_search"} <= set(model.bound)
+    assert {"task", "flaky_community_search"} <= set(model.bound)
+    assert "ask_customer_success" not in model.bound
     task_description = model.descriptions["task"]
     for name in ("knowledge", "forum_post", "support_case"):
         assert name in task_description
@@ -66,7 +67,7 @@ def test_prompt_says_to_relay_failure_copy_verbatim():
 
 
 def test_prompt_covers_routing():
-    for name in ("knowledge", "forum_post", "support_case", "ask_customer_success"):
+    for name in ("knowledge", "forum_post", "support_case", "customer_success"):
         assert name in FRONT_DOOR_PROMPT
 
 

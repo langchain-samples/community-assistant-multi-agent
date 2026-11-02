@@ -3,20 +3,25 @@
 * Support Case runs on its own Agent Server (``langgraph.support_case.json``) and
   is reached through ``RemoteGraph``. Moving it to LangSmith Deployment needs only
   ``SUPPORT_CASE_URL`` and ``LANGSMITH_API_KEY``.
-* Customer Success is reached only through the A2A protocol (``ask_customer_success``
+* Customer Success is reached only through the A2A protocol (``customer_success_subagent``
   and ``fetch_agent_card``), so it can be any A2A-compliant agent, on any stack.
+
+Both are deep-agent subagents: the front door delegates to them with ``task`` like any
+local subagent, and only the runnable behind each one knows how to reach it.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
+from typing import Any
 
 import httpx
 from deepagents import CompiledSubAgent
-from langchain.tools import ToolRuntime, tool
-from langchain_core.messages import convert_to_messages
+from langchain_core.messages import AIMessage, convert_to_messages
+from langchain_core.runnables import RunnableLambda
 from langgraph.config import get_config
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.runtime import get_runtime
@@ -241,8 +246,8 @@ _AGENT_ROLES = {"agent", "ROLE_AGENT"}
 class A2AError(RuntimeError):
     """The A2A call failed: transport error, JSON-RPC error, or no usable reply.
 
-    The tool raises it, so the front door's tool-retry middleware retries the call
-    once and then returns the localized failure message.
+    The subagent retries once on it. A second failure propagates out of the ``task``
+    call, and the front door's tool middleware turns it into the localized failure message.
     """
 
 
@@ -354,18 +359,40 @@ def _send_message(question: str, user: UserContext) -> str:
     return _reply_text(task)
 
 
-@tool
-def ask_customer_success(question: str, runtime: ToolRuntime[UserContext]) -> str:
-    """Ask the Customer Success team's agent about training and enablement for the
-    user's purchased products. It is a separate system; pass a self-contained question."""
+def ask_customer_success(question: str, context: Any) -> str:
+    """Ask the Customer Success agent over A2A on behalf of the user in ``context``."""
     try:
-        user = require_user_context(runtime.context)
+        user = require_user_context(context)
     except PermissionError:
         # Fail closed: nothing is sent without an identity, and a retry can't fix that.
-        logger.warning("ask_customer_success called without a user context")
+        logger.warning("customer_success called without a user context")
         return failure_message("en_US")
-    # An A2AError propagates: the tool-retry middleware retries, then localizes it.
-    return _send_message(question, user)
+    return _send_message(question, user)  # raises A2AError
+
+
+def _delegate(state: dict) -> dict:
+    # Runs inside the front door's ``task`` call, so ``get_runtime()`` is the front
+    # door's runtime and carries the user context.
+    question = state["messages"][-1].text
+    return {"messages": [AIMessage(ask_customer_success(question, get_runtime().context))]}
+
+
+async def _adelegate(state: dict) -> dict:
+    return await asyncio.to_thread(_delegate, state)  # copies the context, so get_runtime() works
+
+
+def customer_success_subagent() -> CompiledSubAgent:
+    return {
+        "name": "customer_success",
+        "description": (
+            "Customer Success team's agent (any stack, reached over A2A). Answers questions "
+            "about training and enablement for the user's purchased products. Pass a "
+            "self-contained question."
+        ),
+        "runnable": RunnableLambda(_delegate, afunc=_adelegate, name="customer_success").with_retry(
+            retry_if_exception_type=(A2AError,), stop_after_attempt=2, wait_exponential_jitter=False
+        ),
+    }
 
 
 def fetch_agent_card() -> dict:
