@@ -80,7 +80,7 @@ KB_CORPUS: list[dict] = [
 CASES: dict[str, dict] = {
     "CS-1042": {
         "id": "CS-1042",
-        "owner": "admin_customer",
+        "owner": "u-1001",  # admin_customer
         "status": "Waiting on Acme",
         "subject": "Time off accrual balances not updating after plan change",
         "description": "After the Time Off Plan change, accrual balances stopped updating "

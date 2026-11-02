@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 from deepagents import create_deep_agent
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command

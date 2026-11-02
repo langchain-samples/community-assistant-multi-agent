@@ -4,7 +4,6 @@ from typing import Any
 
 from deepagents import create_deep_agent
 from langchain_core.language_models.fake_chat_models import (
-    FakeMessagesListChatModel,
     GenericFakeChatModel,
 )
 from langchain_core.messages import AIMessage, HumanMessage

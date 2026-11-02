@@ -13,7 +13,7 @@ from typing import Annotated, TypedDict
 from deepagents import CompiledSubAgent
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import get_runtime
@@ -66,10 +66,8 @@ _SOURCES_HEADING = re.compile(r"^\W*sources\W*$", re.IGNORECASE | re.MULTILINE)
 
 def _strip_sources(text: str) -> str:
     """Drop a sources list the model wrote anyway, so the linked one below is the only one."""
-    match = None
-    for match in _SOURCES_HEADING.finditer(text):
-        pass
-    return text[: match.start()].rstrip() if match else text.strip()
+    headings = list(_SOURCES_HEADING.finditer(text))
+    return text[: headings[-1].start()].rstrip() if headings else text.strip()
 
 
 def _make_answer_node(model: BaseChatModel | None):
@@ -100,13 +98,8 @@ def _make_answer_node(model: BaseChatModel | None):
 
 def build_knowledge_graph(model: BaseChatModel | None = None) -> CompiledStateGraph:
     g = StateGraph(KnowledgeState, context_schema=UserContext)
-    g.add_node("retrieve", retrieve)
-    g.add_node("filter_by_entitlement", filter_by_entitlement)
-    g.add_node("answer_with_citations", _make_answer_node(model))
+    g.add_sequence([retrieve, filter_by_entitlement, _make_answer_node(model)])
     g.add_edge(START, "retrieve")
-    g.add_edge("retrieve", "filter_by_entitlement")
-    g.add_edge("filter_by_entitlement", "answer_with_citations")
-    g.add_edge("answer_with_citations", END)
     return g.compile()
 
 

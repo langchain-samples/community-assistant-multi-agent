@@ -24,7 +24,7 @@ from langchain.agents.middleware import (
     dynamic_prompt,
     hook_config,
 )
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.errors import GraphBubbleUp
 from langgraph.types import Command, interrupt
 
@@ -62,19 +62,10 @@ def is_broad(text: str) -> bool:
     return any(t in words for t in BROAD_TOPICS)
 
 
-def _text(message: AnyMessage) -> str:
-    content = message.content
-    if isinstance(content, str):
-        return content
-    return " ".join(
-        b if isinstance(b, str) else b.get("text", "") for b in content if isinstance(b, (str, dict))
-    )
-
-
 def _last_human_text(state: dict[str, Any]) -> str | None:
     for m in reversed(state["messages"]):
         if isinstance(m, HumanMessage):
-            return _text(m)
+            return m.text
     return None
 
 
@@ -94,7 +85,7 @@ class SafetyMiddleware(AgentMiddleware):
 
     def after_agent(self, state, runtime) -> dict[str, Any] | None:
         last = state["messages"][-1] if state["messages"] else None
-        if isinstance(last, AIMessage) and is_unsafe(_text(last)):
+        if isinstance(last, AIMessage) and is_unsafe(last.text):
             # Same id -> the add_messages reducer replaces the unsafe message.
             return {"messages": [AIMessage(REFUSAL_COPY, id=last.id)]}
         return None
@@ -179,7 +170,7 @@ class LocalizedToolRetryMiddleware(ToolRetryMiddleware):
 @dynamic_prompt
 def user_context_prompt(request: ModelRequest) -> str:
     """Runtime context -> prompt: tell the model who the user is and which language to reply in."""
-    base = _text(request.system_message) if request.system_message else ""
+    base = request.system_message.text if request.system_message else ""
     try:
         user = require_user_context(request.runtime.context)
     except PermissionError:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -35,9 +35,9 @@ class UserContext:
             return cls(
                 user_id=d["user_id"],
                 display_name=d["display_name"],
-                roles=tuple(d.get("roles", ())),
-                entitlements=tuple(d.get("entitlements", ())),
-                purchased_products=tuple(d.get("purchased_products", ())),
+                roles=d.get("roles", ()),
+                entitlements=d.get("entitlements", ()),
+                purchased_products=d.get("purchased_products", ()),
                 locale=d.get("locale", "en_US"),
             )
         except (KeyError, TypeError, AttributeError) as exc:
@@ -61,14 +61,7 @@ DEMO_USERS: dict[str, UserContext] = {
         entitlements=("HCM",),
         purchased_products=("Acme HCM",),
     ),
-    "fr_customer": UserContext(
-        user_id="u-3003",
-        display_name="Camille Dubois",
-        roles=_ADMIN.roles,
-        entitlements=_ADMIN.entitlements,
-        purchased_products=_ADMIN.purchased_products,
-        locale="fr_FR",
-    ),
+    "fr_customer": replace(_ADMIN, user_id="u-3003", display_name="Camille Dubois", locale="fr_FR"),
 }
 
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import warnings
 
 import pytest
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
@@ -15,7 +14,6 @@ from community_assistant.support_case.agent import (
     DENIED_COPY,
     build_support_case_agent,
     create_case,
-    get_case_status,
 )
 
 CREATE_ARGS = {
@@ -118,7 +116,7 @@ def test_create_case_approved_creates_case():
         context=DEMO_USERS["admin_customer"],
     )
     assert "CS-1043" in _tool_text(result)
-    assert sc.CASES_STORE["CS-1043"]["owner"] == "admin_customer"
+    assert sc.CASES_STORE["CS-1043"]["owner"] == DEMO_USERS["admin_customer"].user_id
     assert sc.CASES_STORE["CS-1043"]["subject"] == CREATE_ARGS["subject"]
     # The baseline mock case has the same shape as a created one.
     assert set(sc.CASES_STORE["CS-1042"]) == set(sc.CASES_STORE["CS-1043"])

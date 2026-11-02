@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 
 from conftest import ToolCallingFake

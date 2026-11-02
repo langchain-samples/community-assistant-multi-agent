@@ -39,3 +39,10 @@ def test_list_fields_are_stored_as_tuples():
 def test_malformed_context_fails_closed_with_permission_error(bad):
     with pytest.raises(PermissionError):
         require_user_context(bad)
+
+
+def test_from_dict_treats_a_lone_string_as_one_value():
+    user = UserContext.from_dict(
+        {"user_id": "u", "display_name": "U", "roles": "can_create_case"}
+    )
+    assert user.roles == ("can_create_case",)

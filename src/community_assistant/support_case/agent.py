@@ -15,7 +15,7 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 
-from community_assistant.context import DEMO_USERS, UserContext, require_user_context
+from community_assistant.context import UserContext, require_user_context
 from community_assistant.mock_data import CASES
 from community_assistant.models import get_model
 from community_assistant.tracing import continue_caller_trace
@@ -45,20 +45,6 @@ def reset_cases() -> None:
     _next_case_number = FIRST_NEW_CASE_NUMBER
 
 
-def _owner_key(user: UserContext) -> str:
-    for key, demo_user in DEMO_USERS.items():
-        if demo_user.user_id == user.user_id:
-            return key
-    return user.user_id
-
-
-def _owns(case: dict, user: UserContext) -> bool:
-    owner = case["owner"]
-    demo_owner = DEMO_USERS.get(owner)
-    owner_id = demo_owner.user_id if demo_owner else owner
-    return owner_id == user.user_id
-
-
 @tool
 def get_case_status(case_id: str, runtime: ToolRuntime[UserContext]) -> str:
     """Look up the status of one of the current user's support cases, e.g. CS-1042."""
@@ -68,7 +54,7 @@ def get_case_status(case_id: str, runtime: ToolRuntime[UserContext]) -> str:
     except PermissionError:
         return not_found
     case = CASES_STORE.get(case_id.strip().upper())
-    if case is None or not _owns(case, user):
+    if case is None or case["owner"] != user.user_id:
         return not_found
     return (
         f"{case['id']}: {case['status']}. {case['subject']} "
@@ -92,7 +78,7 @@ def create_case(
     _next_case_number += 1
     CASES_STORE[case_id] = {
         "id": case_id,
-        "owner": _owner_key(user),
+        "owner": user.user_id,
         "status": "Open",
         "subject": subject,
         "description": description,
