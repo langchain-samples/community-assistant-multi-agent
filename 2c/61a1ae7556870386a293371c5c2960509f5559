@@ -1,0 +1,21 @@
+docs/img/architecture.mmd
+  s_49e87e495cf4de::t_3a7fdc42770913 4,13-14
+docs/img/architecture.svg
+  s_49e87e495cf4de::t_5157bc3a40f87f 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2c61a1ae7556870386a293371c5c2960509f5559",
+  "prompts": {},
+  "sessions": {
+    "s_49e87e495cf4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77a1dc46-c631-44ef-8427-58a1b9019af2",
+        "model": "unknown"
+      },
+      "human_author": "Stephen Chu <stephen.chu@langchain.dev>"
+    }
+  }
+}
