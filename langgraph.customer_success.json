@@ -1,0 +1,10 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "customer_success": {
+      "path": "./src/community_assistant/customer_success/agent.py:make_graph",
+      "description": "Customer Success agent: finds training and enablement for the products a customer has purchased."
+    }
+  },
+  "env": ".env"
+}

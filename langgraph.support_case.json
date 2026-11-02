@@ -1,0 +1,10 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "support_case": {
+      "path": "./src/community_assistant/support_case/agent.py:make_graph",
+      "description": "Support Case agent: looks up case status and opens new support cases (with approval)."
+    }
+  },
+  "env": ".env"
+}

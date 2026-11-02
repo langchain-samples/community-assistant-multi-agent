@@ -1,0 +1,240 @@
+"""Front-door middleware: the flat graph's guard nodes, expressed as middleware.
+
+Node -> middleware mapping (a flat LangGraph graph -> this demo):
+
+* ``safety_check`` node            -> ``SafetyMiddleware``
+* ``broadness_check`` + follow-up  -> ``BroadnessMiddleware`` (uses ``interrupt``)
+* retry-once-then-error node       -> ``LocalizedToolRetryMiddleware`` and
+                                      ``LocalizedModelRetryMiddleware``
+
+Pass ``front_door_middleware()`` to ``create_deep_agent(middleware=...)``.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    ModelResponse,
+    ModelRetryMiddleware,
+    ToolRetryMiddleware,
+    hook_config,
+)
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.errors import GraphBubbleUp
+from langgraph.types import Command, interrupt
+
+from community_assistant.context import require_user_context
+from community_assistant.localization import REFUSAL_COPY, failure_message
+
+logger = logging.getLogger(__name__)
+
+# Tools that are safe to call twice. A ``task`` delegation is not: it re-runs a whole
+# subagent (and its side effects, such as an approval or a created case). Other tools
+# still get the localized failure message, just without a retry.
+RETRIED_TOOLS = ("flaky_community_search", "ask_customer_success")
+
+UNSAFE_PATTERNS = ("ignore previous instructions", "social security number", "how do i hack")
+BROAD_TOPICS = ("payroll", "benefits", "hcm", "financials", "acme")
+QUESTION_WORDS = ("how", "what", "why", "where", "when", "can", "does", "is")
+CLARIFICATION_QUESTION = (
+    "Could you tell me a bit more? For example, which product area and what you're trying to do?"
+)
+
+
+def is_unsafe(text: str) -> bool:
+    lowered = text.lower()
+    return any(p in lowered for p in UNSAFE_PATTERNS)
+
+
+def is_broad(text: str) -> bool:
+    """A short topic-only message (e.g. "payroll") with no question word."""
+    words = [w.strip("?.,!:;").lower() for w in text.split()]
+    if not words or len(words) > 4:
+        return False
+    if any(w in QUESTION_WORDS for w in words):
+        return False
+    return any(t in words for t in BROAD_TOPICS)
+
+
+def _text(message: AnyMessage) -> str:
+    content = message.content
+    if isinstance(content, str):
+        return content
+    return " ".join(
+        b if isinstance(b, str) else b.get("text", "") for b in content if isinstance(b, (str, dict))
+    )
+
+
+def _last_human_text(state: dict[str, Any]) -> str | None:
+    for m in reversed(state["messages"]):
+        if isinstance(m, HumanMessage):
+            return _text(m)
+    return None
+
+
+def _refusal() -> dict[str, Any]:
+    return {"messages": [AIMessage(REFUSAL_COPY)], "jump_to": "end"}
+
+
+class SafetyMiddleware(AgentMiddleware):
+    """Replaces the ``safety_check`` node: input guard before, output guard after."""
+
+    @hook_config(can_jump_to=["end"])
+    def before_agent(self, state, runtime) -> dict[str, Any] | None:
+        text = _last_human_text(state)
+        if text is not None and is_unsafe(text):
+            return _refusal()
+        return None
+
+    def after_agent(self, state, runtime) -> dict[str, Any] | None:
+        last = state["messages"][-1] if state["messages"] else None
+        if isinstance(last, AIMessage) and is_unsafe(_text(last)):
+            # Same id -> the add_messages reducer replaces the unsafe message.
+            return {"messages": [AIMessage(REFUSAL_COPY, id=last.id)]}
+        return None
+
+
+class BroadnessMiddleware(AgentMiddleware):
+    """Replaces ``broadness_check`` + the follow-up node.
+
+    Pauses the run with ``interrupt`` and asks for detail. On resume LangGraph
+    re-runs this hook and ``interrupt`` returns the user's reply, which is
+    appended to the conversation exactly once (the first pass never returned a
+    state update, so nothing was persisted).
+    """
+
+    @hook_config(can_jump_to=["end"])
+    def before_agent(self, state, runtime) -> dict[str, Any] | None:
+        text = _last_human_text(state)
+        if text is None or not is_broad(text):
+            return None
+        reply = interrupt({"type": "clarification", "question": CLARIFICATION_QUESTION})
+        reply_text = str(reply)
+        if is_unsafe(reply_text):
+            return _refusal()
+        return {"messages": [HumanMessage(reply_text)]}
+
+
+def _locale(request: Any) -> str:
+    ctx = getattr(getattr(request, "runtime", None), "context", None)
+    try:
+        return require_user_context(ctx).locale
+    except PermissionError:
+        return "en_US"
+
+
+def localized_tool_error(exc: Exception, request: Any) -> str:
+    """Log ``exc`` and return the hard-failure copy in the user's locale."""
+    logger.exception("tool call failed", exc_info=exc)
+    return failure_message(_locale(request))
+
+
+class LocalizedToolRetryMiddleware(ToolRetryMiddleware):
+    """Retry a failing tool, then return a localized ``ToolMessage``.
+
+    ``ToolRetryMiddleware(on_failure=callable)`` only receives the exception,
+    so it cannot see the user's locale (held in ``request.runtime.context``).
+    This thin subclass keeps the built-in retry/backoff loop (``on_failure="error"``
+    re-raises after the last attempt) and converts the final error here, where
+    the request is available. Tools outside ``tools=[...]`` are not retried, but
+    their errors are converted the same way.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(on_failure="error", **kwargs)
+
+    def _to_message(self, exc: Exception, request: Any) -> ToolMessage:
+        return ToolMessage(
+            content=localized_tool_error(exc, request),
+            tool_call_id=request.tool_call["id"],
+            name=request.tool_call["name"],
+            status="error",
+        )
+
+    def wrap_tool_call(self, request, handler) -> ToolMessage | Command[Any]:
+        try:
+            return super().wrap_tool_call(request, handler)
+        except GraphBubbleUp:
+            raise
+        except Exception as exc:
+            return self._to_message(exc, request)
+
+    async def awrap_tool_call(
+        self, request, handler: Callable[..., Awaitable[ToolMessage | Command[Any]]]
+    ) -> ToolMessage | Command[Any]:
+        try:
+            return await super().awrap_tool_call(request, handler)
+        except GraphBubbleUp:
+            raise
+        except Exception as exc:
+            return self._to_message(exc, request)
+
+
+class LocalizedModelRetryMiddleware(ModelRetryMiddleware):
+    """Retry a failing model call, then answer with the localized failure copy.
+
+    The built-in default (``on_failure="continue"``) turns the provider's error text
+    into the final answer, and a callable ``on_failure`` can't see the locale. As
+    with the tool retry above, the retry loop is kept and the final error is
+    converted here.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(on_failure="error", **kwargs)
+
+    def _to_response(self, exc: Exception, request: Any) -> ModelResponse:
+        logger.exception("model call failed", exc_info=exc)
+        return ModelResponse(result=[AIMessage(failure_message(_locale(request)))])
+
+    def wrap_model_call(self, request, handler) -> ModelResponse:
+        try:
+            return super().wrap_model_call(request, handler)
+        except GraphBubbleUp:
+            raise
+        except Exception as exc:
+            return self._to_response(exc, request)
+
+    async def awrap_model_call(self, request, handler) -> ModelResponse:
+        try:
+            return await super().awrap_model_call(request, handler)
+        except GraphBubbleUp:
+            raise
+        except Exception as exc:
+            return self._to_response(exc, request)
+
+
+class UserContextPromptMiddleware(AgentMiddleware):
+    """Runtime context -> prompt: tell the model who the user is and which language to reply in."""
+
+    def _with_user_line(self, request):
+        try:
+            user = require_user_context(request.runtime.context)
+        except PermissionError:
+            return request
+        line = (
+            f"Current user: {user.display_name}. Locale: {user.locale}. "
+            "Reply in this locale's language."
+        )
+        base = request.system_message.content if request.system_message else ""
+        text = base if isinstance(base, str) else _text(request.system_message)
+        return request.override(system_message=SystemMessage(content=f"{text}\n\n{line}"))
+
+    def wrap_model_call(self, request, handler):
+        return handler(self._with_user_line(request))
+
+    async def awrap_model_call(self, request, handler):
+        return await handler(self._with_user_line(request))
+
+
+def front_door_middleware() -> list[AgentMiddleware]:
+    return [
+        UserContextPromptMiddleware(),
+        SafetyMiddleware(),
+        BroadnessMiddleware(),
+        LocalizedToolRetryMiddleware(tools=list(RETRIED_TOOLS), max_retries=1, initial_delay=0.2),
+        LocalizedModelRetryMiddleware(max_retries=1),
+    ]

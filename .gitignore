@@ -1,0 +1,11 @@
+.venv/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+__pycache__/
+.langgraph_api/
+.pytest_cache/
+.DS_Store

@@ -1,0 +1,81 @@
+"""Per-request user context shared by every agent in the demo."""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+
+
+@dataclass(frozen=True)
+class UserContext:
+    user_id: str
+    display_name: str
+    roles: tuple[str, ...]
+    entitlements: tuple[str, ...]
+    purchased_products: tuple[str, ...]
+    locale: str = "en_US"
+
+    def __post_init__(self) -> None:
+        # Context sent as JSON (the Agent Server API, A2A) arrives with lists. Store
+        # tuples so the declared types hold and Pydantic serializes it without warnings.
+        # A lone string is one value, not a sequence of characters (no substring checks).
+        for name in ("roles", "entitlements", "purchased_products"):
+            value = getattr(self, name)
+            if isinstance(value, str):
+                object.__setattr__(self, name, (value,))
+            elif not isinstance(value, tuple):
+                object.__setattr__(self, name, tuple(value))
+
+    def to_dict(self) -> dict:
+        return {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(self).items()}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> UserContext:
+        """Build from the JSON form. A malformed dict raises ``PermissionError`` (fail closed)."""
+        try:
+            return cls(
+                user_id=d["user_id"],
+                display_name=d["display_name"],
+                roles=tuple(d.get("roles", ())),
+                entitlements=tuple(d.get("entitlements", ())),
+                purchased_products=tuple(d.get("purchased_products", ())),
+                locale=d.get("locale", "en_US"),
+            )
+        except (KeyError, TypeError, AttributeError) as exc:
+            raise PermissionError(f"malformed user context: {exc!r}") from exc
+
+
+_ADMIN = UserContext(
+    user_id="u-1001",
+    display_name="Alex Morgan",
+    roles=("customer", "can_create_case"),
+    entitlements=("HCM", "Payroll"),
+    purchased_products=("Acme HCM", "Acme Payroll"),
+)
+
+DEMO_USERS: dict[str, UserContext] = {
+    "admin_customer": _ADMIN,
+    "partner_readonly": UserContext(
+        user_id="u-2002",
+        display_name="Sam Rivera",
+        roles=("partner",),
+        entitlements=("HCM",),
+        purchased_products=("Acme HCM",),
+    ),
+    "fr_customer": UserContext(
+        user_id="u-3003",
+        display_name="Camille Dubois",
+        roles=_ADMIN.roles,
+        entitlements=_ADMIN.entitlements,
+        purchased_products=_ADMIN.purchased_products,
+        locale="fr_FR",
+    ),
+}
+
+
+def require_user_context(runtime_context: UserContext | dict | None) -> UserContext:
+    """Return a UserContext from either form; fail closed (``PermissionError``) when absent or malformed."""
+    if runtime_context is None:
+        raise PermissionError("missing user context")
+    if isinstance(runtime_context, UserContext):
+        return runtime_context
+    return UserContext.from_dict(runtime_context)

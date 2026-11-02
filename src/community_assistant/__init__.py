@@ -1,0 +1,1 @@
+"""Community assistant reference demo."""
