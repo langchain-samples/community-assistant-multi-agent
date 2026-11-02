@@ -1,4 +1,3 @@
-import asyncio
 
 from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
@@ -158,44 +157,3 @@ def test_non_retried_tool_fails_once_with_localized_copy():
     assert state["n"] == 1  # not retried
     assert tm.content == FAILURE_COPY["fr_FR"]
     assert tm.status == "error"
-
-
-class FailingModel(FakeModel):
-    def _generate(self, *a, **k):
-        self.calls += 1
-        raise RuntimeError("provider error: 529 overloaded_error request_id=req_123")
-
-    async def _agenerate(self, *a, **k):
-        return self._generate(*a, **k)
-
-
-def _failing_agent():
-    model = FailingModel(messages=iter([]))
-    agent = create_agent(
-        model,
-        middleware=front_door_middleware(),
-        checkpointer=InMemorySaver(),
-        context_schema=UserContext,
-    )
-    return agent, model
-
-
-def test_model_hard_failure_returns_localized_copy_not_provider_error():
-    agent, model = _failing_agent()
-    out = agent.invoke(
-        {"messages": [HumanMessage("How do I find a report?")]},
-        cfg(),
-        context=DEMO_USERS["fr_customer"],
-    )
-    assert model.calls == 2  # one retry
-    answer = out["messages"][-1]
-    assert isinstance(answer, AIMessage)
-    assert answer.content == FAILURE_COPY["fr_FR"]
-    assert "529" not in answer.content
-
-
-def test_model_hard_failure_async_and_without_context_falls_back_to_en_us():
-    agent, model = _failing_agent()
-    out = asyncio.run(agent.ainvoke({"messages": [HumanMessage("How do I find a report?")]}, cfg()))
-    assert model.calls == 2
-    assert out["messages"][-1].content == FAILURE_COPY["en_US"]

@@ -105,7 +105,7 @@ def s4_forum(c: Check) -> None:
 
 
 def s5_support_case(c: Check) -> None:
-    request = "Open a support case: time off balances are wrong after the accrual change"
+    request = "Open a support case for Acme HCM: time off balances are wrong after the accrual change"
     t = run_turn(request, scenario="5-support-case")
     c.that("create_case" in t.action_names, "remote create_case approval surfaced", t)
     c.that("task:support_case" in t.calls, "routed to the support_case subagent", t)

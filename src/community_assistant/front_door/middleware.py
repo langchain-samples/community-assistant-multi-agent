@@ -4,8 +4,9 @@ Node -> middleware mapping (a flat LangGraph graph -> this demo):
 
 * ``safety_check`` node            -> ``SafetyMiddleware``
 * ``broadness_check`` + follow-up  -> ``BroadnessMiddleware`` (uses ``interrupt``)
-* retry-once-then-error node       -> ``LocalizedToolRetryMiddleware`` and
-                                      ``LocalizedModelRetryMiddleware``
+* retry-once-then-error node       -> ``LocalizedToolRetryMiddleware``
+
+``user_context_prompt`` is plumbing, not a guard: it tells the model the user's locale.
 
 Pass ``front_door_middleware()`` to ``create_deep_agent(middleware=...)``.
 """
@@ -18,12 +19,12 @@ from typing import Any
 
 from langchain.agents.middleware import (
     AgentMiddleware,
-    ModelResponse,
-    ModelRetryMiddleware,
+    ModelRequest,
     ToolRetryMiddleware,
+    dynamic_prompt,
     hook_config,
 )
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langgraph.errors import GraphBubbleUp
 from langgraph.types import Command, interrupt
 
@@ -174,67 +175,24 @@ class LocalizedToolRetryMiddleware(ToolRetryMiddleware):
             return self._to_message(exc, request)
 
 
-class LocalizedModelRetryMiddleware(ModelRetryMiddleware):
-    """Retry a failing model call, then answer with the localized failure copy.
-
-    The built-in default (``on_failure="continue"``) turns the provider's error text
-    into the final answer, and a callable ``on_failure`` can't see the locale. As
-    with the tool retry above, the retry loop is kept and the final error is
-    converted here.
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(on_failure="error", **kwargs)
-
-    def _to_response(self, exc: Exception, request: Any) -> ModelResponse:
-        logger.exception("model call failed", exc_info=exc)
-        return ModelResponse(result=[AIMessage(failure_message(_locale(request)))])
-
-    def wrap_model_call(self, request, handler) -> ModelResponse:
-        try:
-            return super().wrap_model_call(request, handler)
-        except GraphBubbleUp:
-            raise
-        except Exception as exc:
-            return self._to_response(exc, request)
-
-    async def awrap_model_call(self, request, handler) -> ModelResponse:
-        try:
-            return await super().awrap_model_call(request, handler)
-        except GraphBubbleUp:
-            raise
-        except Exception as exc:
-            return self._to_response(exc, request)
-
-
-class UserContextPromptMiddleware(AgentMiddleware):
+@dynamic_prompt
+def user_context_prompt(request: ModelRequest) -> str:
     """Runtime context -> prompt: tell the model who the user is and which language to reply in."""
-
-    def _with_user_line(self, request):
-        try:
-            user = require_user_context(request.runtime.context)
-        except PermissionError:
-            return request
-        line = (
-            f"Current user: {user.display_name}. Locale: {user.locale}. "
-            "Reply in this locale's language."
-        )
-        base = request.system_message.content if request.system_message else ""
-        text = base if isinstance(base, str) else _text(request.system_message)
-        return request.override(system_message=SystemMessage(content=f"{text}\n\n{line}"))
-
-    def wrap_model_call(self, request, handler):
-        return handler(self._with_user_line(request))
-
-    async def awrap_model_call(self, request, handler):
-        return await handler(self._with_user_line(request))
+    base = _text(request.system_message) if request.system_message else ""
+    try:
+        user = require_user_context(request.runtime.context)
+    except PermissionError:
+        return base
+    return (
+        f"{base}\n\nCurrent user: {user.display_name}. Locale: {user.locale}. "
+        "Reply in this locale's language."
+    )
 
 
 def front_door_middleware() -> list[AgentMiddleware]:
     return [
-        UserContextPromptMiddleware(),
+        user_context_prompt,
         SafetyMiddleware(),
         BroadnessMiddleware(),
         LocalizedToolRetryMiddleware(tools=list(RETRIED_TOOLS), max_retries=1, initial_delay=0.2),
-        LocalizedModelRetryMiddleware(max_retries=1),
     ]

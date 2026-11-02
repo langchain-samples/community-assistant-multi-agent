@@ -2,26 +2,13 @@
 
 A Deep Agents orchestrator that calls other agents in three ways: as a compiled
 subgraph, through `RemoteGraph` to another server, and over A2A. Deterministic checks
-(safety, clarification, retries) are middleware. All external systems are mocked.
+(safety, clarification, tool retry) are middleware. All external systems are mocked.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    user([User + UserContext]) --> FD
+![Architecture](docs/img/architecture.svg)
 
-    subgraph FD["Front door :2024 (create_deep_agent)"]
-        direction TB
-        MW["Middleware: locale prompt, safety,<br/>broadness interrupt, retries"]
-        ORCH["Deep agent orchestrator"]
-        MW --> ORCH
-    end
-
-    ORCH -->|"compiled StateGraph"| K["knowledge"]
-    ORCH -->|"HITL approval"| F["forum_post"]
-    ORCH -->|"RemoteGraph"| SC["support_case :2025"]
-    ORCH -->|"A2A"| CS["customer_success :2026"]
-```
+Source: `docs/img/architecture.mmd`.
 
 A `UserContext` (roles, entitlements, locale) is passed with every run and
 forwarded across every boundary. Each agent enforces its own rules on it.
