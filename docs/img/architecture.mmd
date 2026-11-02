@@ -1,7 +1,7 @@
 flowchart LR
     user([User + UserContext]) --> FD
 
-    subgraph FD["Front door :2024 (create_deep_agent)"]
+    subgraph FD["Front door (create_deep_agent)"]
         direction TB
         MW["Middleware\nsafety\nbroadness interrupt\ntool retry\nlocale prompt"]
         ORCH["Deep agent orchestrator"]
@@ -10,5 +10,5 @@ flowchart LR
 
     ORCH -->|"compiled StateGraph"| K["knowledge"]
     ORCH -->|"subagent + approval"| F["forum_post"]
-    ORCH -->|"RemoteGraph"| SC["support_case :2025"]
-    ORCH -->|"A2A"| CS["customer_success :2026"]
+    ORCH -->|"RemoteGraph"| SC["support_case"]
+    ORCH -->|"A2A"| CS["customer_success"]
