@@ -1,0 +1,21 @@
+README.md
+  s_49e87e495cf4de::t_45e9e6f8146869 3-13,19-21,23,28-30,32,34-37,39-45,47,49,57-59,63-64,69,71-80,84-86
+demo.ipynb
+  s_49e87e495cf4de::t_858fa582d4f0c0 8,10,12-19,27,79,81,125,127,180,182,273,275,376,378,380,502,504,552-554,556,627,629,707,709
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "90281b88b9a8f5a09d3da576911a6001b6fec776",
+  "prompts": {},
+  "sessions": {
+    "s_49e87e495cf4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77a1dc46-c631-44ef-8427-58a1b9019af2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Stephen Chu <stephen.chu@langchain.dev>"
+    }
+  }
+}
