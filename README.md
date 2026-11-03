@@ -19,13 +19,15 @@ every subagent, including the remote ones, and each one applies its own access r
 
 ## Choosing how to connect a subagent
 
-| | Config-defined subagent | LangGraph workflow, in process | `RemoteGraph` | A2A |
-|---|---|---|---|---|
-| Example here | `forum_post` | `knowledge` | `support_case` | `customer_success` |
-| Owner | your team | your team | another team | another team or vendor |
-| What the subagent is built with | a prompt and tools; Deep Agents builds the agent | LangGraph, in your codebase | LangGraph, on its own Agent Server | anything that supports A2A |
-| Keeps threads and interrupts | yes | yes | yes | no, it's one message in and one reply out |
-| Good fit when | the model should decide the steps | the steps are fixed and must always run | the other team also uses LangGraph | you can't count on LangGraph on the other side |
+| How it's connected | Example | Where it runs | Good fit when |
+|---|---|---|---|
+| Config-defined subagent | `forum_post` | in the orchestrator's process | your team owns it, and the model should decide the steps |
+| LangGraph workflow | `knowledge` | in the orchestrator's process | your team owns it, and the steps are fixed and must always run |
+| `RemoteGraph` | `support_case` | another team's Agent Server | another team owns it, and they also use LangGraph |
+| A2A | `customer_success` | anywhere, on any stack | another team or vendor owns it, and you can't count on LangGraph |
+
+The first three keep threads and approvals across the boundary. A2A is one message in and
+one reply out.
 
 ## Notes
 
