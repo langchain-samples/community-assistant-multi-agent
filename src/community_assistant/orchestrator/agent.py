@@ -15,6 +15,7 @@ Safety checks, clarifying questions and retries are handled by middleware
 from __future__ import annotations
 
 from deepagents import create_deep_agent
+from deepagents.middleware.filesystem import FilesystemMiddleware
 from langchain_core.language_models import BaseChatModel
 from langgraph.graph.state import CompiledStateGraph
 
@@ -83,7 +84,12 @@ def build_orchestrator(
         model or get_model(),
         tools=[flaky_community_search],
         system_prompt=ORCHESTRATOR_PROMPT,
-        middleware=orchestrator_middleware(),
+        middleware=[
+            # Deep Agents adds file tools by default. This assistant doesn't use them, so keep
+            # only read_file, which FilesystemMiddleware requires.
+            FilesystemMiddleware(tools=["read_file"]),
+            *orchestrator_middleware(),
+        ],
         subagents=[
             knowledge_subagent,
             forum_subagent,

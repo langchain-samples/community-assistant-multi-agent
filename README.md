@@ -31,22 +31,43 @@ one reply out.
 
 ## Running it
 
+### 1. Set up (once)
+
 You'll need Python 3.11+ and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-cp .env.example .env     # add your model provider key
-make dev-all             # orchestrator :2024, Support Case :2025, Customer Success :2026
+cp .env.example .env
 ```
 
-The model defaults to Claude. To use another one, set `COMMUNITY_MODEL` to an
-`init_chat_model` string, and set `COMMUNITY_MODEL_BASE_URL` if you go through a gateway.
-The other settings are in `.env.example`. The scenarios have only been tested with Claude,
-so re-run the notebook after switching models.
+Then add your model provider key to `.env`. The model defaults to Claude. To use another
+one, set `COMMUNITY_MODEL` to an `init_chat_model` string, and set
+`COMMUNITY_MODEL_BASE_URL` if you go through a gateway. The scenarios have only been
+tested with Claude, so re-run the notebook after switching models.
 
-| Command | What it does |
-|---|---|
-| `make notebook` | re-runs `demo.ipynb` |
+### 2. Start the servers (terminal 1)
+
+```bash
+make dev-all
+```
+
+This starts the orchestrator on :2024, Support Case on :2025 and Customer Success on
+:2026. Leave it running. The notebook only talks to these servers, so it won't work
+without them.
+
+### 3. Run the notebook (terminal 2)
+
+Open `demo.ipynb` in VS Code or Cursor with the `.venv` kernel, or in Jupyter:
+
+```bash
+uv run --with jupyterlab jupyter lab demo.ipynb
+```
+
+Run the cells from the top. To re-run the whole notebook without opening it and save
+the outputs, use `make notebook` instead.
+
+You can also open each server in LangGraph Studio, for example
+`https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`.
 
 ## Scenarios
 
