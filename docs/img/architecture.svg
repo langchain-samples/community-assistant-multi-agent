@@ -1,84 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 570" width="980" height="570" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 620" width="980" height="620" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
     </marker>
   </defs>
-  <rect width="980" height="570" fill="#ffffff"/>
+  <rect width="980" height="620" fill="#ffffff"/>
 
   <!-- User -->
   <rect x="220" y="16" width="200" height="36" rx="18" fill="#ECECFF" stroke="#9370DB"/>
   <text x="320" y="39" text-anchor="middle" fill="#222">User + UserContext</text>
-  <line x1="320" y1="52" x2="320" y2="113" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="320" y1="52" x2="320" y2="106" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
 
   <!-- Front door -->
-  <rect x="40" y="76" width="560" height="410" rx="8" fill="#FAFAFA" stroke="#999"/>
+  <rect x="40" y="76" width="560" height="454" rx="8" fill="#FAFAFA" stroke="#999"/>
   <text x="56" y="98" font-weight="600" fill="#222">Front door: create_deep_agent</text>
 
   <!-- before_agent -->
-  <rect x="60" y="114" width="520" height="50" rx="6" fill="#FFF4D6" stroke="#D9A400"/>
-  <text x="76" y="135" font-weight="600" fill="#6B4E00">before_agent</text>
-  <text x="76" y="154" fill="#6B4E00">safety (input) · broadness → interrupt</text>
-  <line x1="320" y1="164" x2="320" y2="184" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="60" y="108" width="520" height="82" rx="6" fill="#FFF4D6" stroke="#D9A400"/>
+  <text x="76" y="127" font-size="13" font-weight="600" fill="#6B4E00">before_agent</text>
+  <rect x="76" y="136" width="244" height="44" rx="5" fill="#FFFFFF" stroke="#D9A400"/>
+  <text x="90" y="154" font-weight="600" fill="#6B4E00">Safety check</text>
+  <text x="90" y="171" font-size="12" fill="#6B4E00">blocks unsafe input</text>
+  <rect x="332" y="136" width="232" height="44" rx="5" fill="#FFFFFF" stroke="#D9A400"/>
+  <text x="346" y="154" font-weight="600" fill="#6B4E00">Broadness check</text>
+  <text x="346" y="171" font-size="12" fill="#6B4E00">too vague? asks a follow-up first</text>
+  <line x1="320" y1="190" x2="320" y2="208" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
 
   <!-- Agent loop -->
-  <rect x="60" y="186" width="520" height="200" rx="6" fill="#FFFFFF" stroke="#999" stroke-dasharray="5 4"/>
-  <text x="76" y="206" fill="#555">Agent loop</text>
+  <rect x="60" y="210" width="520" height="200" rx="6" fill="#FFFFFF" stroke="#999" stroke-dasharray="5 4"/>
+  <text x="76" y="230" fill="#555">Agent loop</text>
 
-  <rect x="80" y="218" width="210" height="60" rx="6" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="185" y="240" text-anchor="middle" font-weight="600" fill="#222">model</text>
-  <text x="185" y="263" text-anchor="middle" font-size="13" fill="#6B4E00">wrap_model_call: locale prompt</text>
+  <rect x="80" y="242" width="210" height="60" rx="6" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="185" y="264" text-anchor="middle" font-weight="600" fill="#222">model</text>
+  <text x="185" y="287" text-anchor="middle" font-size="13" fill="#6B4E00">wrap_model_call: locale prompt</text>
 
-  <rect x="350" y="218" width="210" height="60" rx="6" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="455" y="240" text-anchor="middle" font-weight="600" fill="#222">tools</text>
-  <text x="455" y="263" text-anchor="middle" font-size="13" fill="#6B4E00">wrap_tool_call: tool retry</text>
+  <rect x="350" y="242" width="210" height="60" rx="6" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="455" y="264" text-anchor="middle" font-weight="600" fill="#222">tools</text>
+  <text x="455" y="287" text-anchor="middle" font-size="13" fill="#6B4E00">wrap_tool_call: tool retry</text>
 
-  <line x1="292" y1="248" x2="348" y2="248" stroke="#555" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <line x1="292" y1="272" x2="348" y2="272" stroke="#555" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
 
   <!-- tool list -->
-  <line x1="364" y1="278" x2="364" y2="366" stroke="#bbb"/>
-  <rect x="374" y="292" width="186" height="26" rx="4" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="386" y="310" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#222">task</text>
-  <rect x="374" y="324" width="186" height="26" rx="4" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="386" y="342" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#222">flaky_community_search</text>
-  <rect x="374" y="356" width="186" height="22" rx="4" fill="#F4F4F4" stroke="#C8C8C8"/>
-  <text x="386" y="371" font-size="12" fill="#888">write_todos, files (built in)</text>
+  <line x1="364" y1="302" x2="364" y2="390" stroke="#bbb"/>
+  <rect x="374" y="316" width="186" height="26" rx="4" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="386" y="334" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" fill="#222">task</text>
+  <rect x="374" y="348" width="186" height="26" rx="4" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="386" y="366" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" fill="#222">flaky_community_search</text>
+  <rect x="374" y="380" width="186" height="22" rx="4" fill="#F4F4F4" stroke="#C8C8C8"/>
+  <text x="386" y="395" font-size="12" fill="#888">write_todos, files (built in)</text>
 
   <!-- after_agent -->
-  <line x1="320" y1="386" x2="320" y2="406" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <rect x="60" y="408" width="520" height="50" rx="6" fill="#FFF4D6" stroke="#D9A400"/>
-  <text x="76" y="429" font-weight="600" fill="#6B4E00">after_agent</text>
-  <text x="76" y="448" fill="#6B4E00">safety (output)</text>
+  <line x1="320" y1="410" x2="320" y2="428" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="60" y="430" width="520" height="82" rx="6" fill="#FFF4D6" stroke="#D9A400"/>
+  <text x="76" y="449" font-size="13" font-weight="600" fill="#6B4E00">after_agent</text>
+  <rect x="76" y="458" width="244" height="44" rx="5" fill="#FFFFFF" stroke="#D9A400"/>
+  <text x="90" y="476" font-weight="600" fill="#6B4E00">Safety check</text>
+  <text x="90" y="493" font-size="12" fill="#6B4E00">checks the answer before it's sent</text>
 
   <!-- Answer -->
-  <line x1="320" y1="458" x2="320" y2="512" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <rect x="220" y="514" width="200" height="36" rx="18" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="320" y="537" text-anchor="middle" fill="#222">Answer</text>
+  <line x1="320" y1="512" x2="320" y2="560" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="220" y="562" width="200" height="36" rx="18" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="320" y="585" text-anchor="middle" fill="#222">Answer</text>
 
   <!-- task -> subagents -->
-  <line x1="560" y1="305" x2="648" y2="305" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="560" y1="329" x2="648" y2="329" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
 
   <!-- Subagents -->
-  <rect x="650" y="186" width="300" height="280" rx="8" fill="#FAFAFA" stroke="#999"/>
-  <text x="666" y="208" font-weight="600" fill="#222">Subagents</text>
+  <rect x="650" y="210" width="300" height="280" rx="8" fill="#FAFAFA" stroke="#999"/>
+  <text x="666" y="232" font-weight="600" fill="#222">Subagents</text>
 
-  <rect x="666" y="220" width="268" height="52" rx="6" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="682" y="241" font-weight="600" fill="#222">knowledge</text>
-  <text x="682" y="261" font-size="13" fill="#444">LangGraph workflow</text>
+  <rect x="666" y="244" width="268" height="52" rx="6" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="682" y="265" font-weight="600" fill="#222">knowledge</text>
+  <text x="682" y="285" font-size="13" fill="#444">LangGraph workflow</text>
 
-  <rect x="666" y="280" width="268" height="52" rx="6" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="682" y="301" font-weight="600" fill="#222">forum_post</text>
-  <text x="682" y="321" font-size="13" fill="#444">prompt + tools, approval</text>
+  <rect x="666" y="304" width="268" height="52" rx="6" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="682" y="325" font-weight="600" fill="#222">forum_post</text>
+  <text x="682" y="345" font-size="13" fill="#444">prompt + tools, approval</text>
 
-  <rect x="666" y="340" width="268" height="52" rx="6" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="682" y="361" font-weight="600" fill="#222">support_case</text>
-  <text x="682" y="381" font-size="13" fill="#444">RemoteGraph · another team's server</text>
+  <rect x="666" y="364" width="268" height="52" rx="6" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="682" y="385" font-weight="600" fill="#222">support_case</text>
+  <text x="682" y="405" font-size="13" fill="#444">RemoteGraph · another team's server</text>
 
-  <rect x="666" y="400" width="268" height="52" rx="6" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="682" y="421" font-weight="600" fill="#222">customer_success</text>
-  <text x="682" y="441" font-size="13" fill="#444">A2A · any stack</text>
+  <rect x="666" y="424" width="268" height="52" rx="6" fill="#ECECFF" stroke="#9370DB"/>
+  <text x="682" y="445" font-weight="600" fill="#222">customer_success</text>
+  <text x="682" y="465" font-size="13" fill="#444">A2A · any stack</text>
 
   <!-- Legend -->
-  <rect x="650" y="500" width="14" height="14" rx="3" fill="#FFF4D6" stroke="#D9A400"/>
-  <text x="672" y="512" font-size="13" fill="#555">middleware hook</text>
+  <rect x="650" y="512" width="14" height="14" rx="3" fill="#FFF4D6" stroke="#D9A400"/>
+  <text x="672" y="524" font-size="13" fill="#555">middleware hook</text>
 </svg>
