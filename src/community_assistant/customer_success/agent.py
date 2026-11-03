@@ -1,9 +1,9 @@
 """Customer Success agent.
 
-This plays the part of a team that doesn't use LangGraph. The front door only talks
+This plays the part of a team that doesn't use LangGraph. The orchestrator only talks
 to it over A2A: it reads the agent card and sends JSON-RPC ``message/send`` requests.
 It happens to run on an Agent Server here (``langgraph.customer_success.json``), but
-the front door doesn't depend on that.
+the orchestrator doesn't depend on that.
 
 The agent card takes its name from the graph ``name`` below and its description from
 ``langgraph.customer_success.json``. The training catalog is mock data.

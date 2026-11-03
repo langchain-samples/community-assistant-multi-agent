@@ -1,7 +1,7 @@
 """Support Case agent.
 
 This plays the part of an agent another team (the Support team) owns and deploys.
-The front door calls it over the network with RemoteGraph. It runs on its own port
+The orchestrator calls it over the network with RemoteGraph. It runs on its own port
 from ``langgraph.support_case.json``, and the cases are mock data kept in memory.
 """
 
@@ -30,19 +30,9 @@ NO_CREATE_NOTE = (
     f'reply with exactly: "{DENIED_COPY}"'
 )
 
-FIRST_NEW_CASE_NUMBER = 1043
-
 # Mock case store: the starting cases plus any created while the server runs.
 CASES_STORE: dict[str, dict] = copy.deepcopy(CASES)
-_next_case_number = FIRST_NEW_CASE_NUMBER
-
-
-def reset_cases() -> None:
-    """Restore the baseline cases (used by tests)."""
-    global _next_case_number
-    CASES_STORE.clear()
-    CASES_STORE.update(copy.deepcopy(CASES))
-    _next_case_number = FIRST_NEW_CASE_NUMBER
+_next_case_number = 1043
 
 
 @tool

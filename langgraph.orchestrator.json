@@ -1,0 +1,10 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "orchestrator": {
+      "path": "./src/community_assistant/orchestrator/agent.py:graph",
+      "description": "Community orchestrator deep agent: routes to knowledge, forum, support case and customer success agents."
+    }
+  },
+  "env": ".env"
+}

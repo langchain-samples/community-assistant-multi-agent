@@ -46,7 +46,6 @@ so run `make smoke` after switching models.
 
 | Command | What it does |
 |---|---|
-| `make test` | unit tests (no model or servers needed) |
 | `make smoke` | runs the scenarios below against the running servers |
 | `make notebook` | re-runs `demo.ipynb` |
 

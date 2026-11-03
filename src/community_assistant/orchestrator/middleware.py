@@ -1,4 +1,4 @@
-"""Front door middleware.
+"""Orchestrator middleware.
 
 In a single flat graph, these checks are usually separate nodes. Here they're middleware:
 
@@ -8,7 +8,7 @@ In a single flat graph, these checks are usually separate nodes. Here they're mi
 
 ``user_context_prompt`` isn't a check. It just tells the model the user's name and locale.
 
-Pass ``front_door_middleware()`` to ``create_deep_agent(middleware=...)``.
+Pass ``orchestrator_middleware()`` to ``create_deep_agent(middleware=...)``.
 """
 
 from __future__ import annotations
@@ -180,7 +180,7 @@ def user_context_prompt(request: ModelRequest) -> str:
     )
 
 
-def front_door_middleware() -> list[AgentMiddleware]:
+def orchestrator_middleware() -> list[AgentMiddleware]:
     return [
         user_context_prompt,
         SafetyMiddleware(),

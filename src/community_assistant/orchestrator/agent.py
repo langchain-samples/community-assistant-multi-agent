@@ -1,6 +1,6 @@
-"""The front door: the main Deep Agents agent.
+"""The orchestrator: the main Deep Agents agent.
 
-It hands each request to one of four subagents. The front door calls them all the
+It hands each request to one of four subagents. The orchestrator calls them all the
 same way, through ``task``, but each is built differently:
 
 * ``knowledge``: a LangGraph workflow (retrieval with citations)
@@ -9,27 +9,27 @@ same way, through ``task``, but each is built differently:
 * ``customer_success``: another team's agent, which could be on any stack (A2A)
 
 Safety checks, clarifying questions and retries are handled by middleware
-(``front_door_middleware``), not by the prompt.
+(``orchestrator_middleware``), not by the prompt.
 """
 
 from __future__ import annotations
 
-from deepagents import CompiledSubAgent, create_deep_agent
+from deepagents import create_deep_agent
 from langchain_core.language_models import BaseChatModel
 from langgraph.graph.state import CompiledStateGraph
 
 from community_assistant.context import UserContext
-from community_assistant.front_door.demo_tools import flaky_community_search
-from community_assistant.front_door.forum import forum_subagent
-from community_assistant.front_door.knowledge import knowledge_subagent
-from community_assistant.front_door.middleware import front_door_middleware
-from community_assistant.front_door.remote_agents import (
+from community_assistant.orchestrator.demo_tools import flaky_community_search
+from community_assistant.orchestrator.forum import forum_subagent
+from community_assistant.orchestrator.knowledge import knowledge_subagent
+from community_assistant.orchestrator.middleware import orchestrator_middleware
+from community_assistant.orchestrator.remote_agents import (
     customer_success_subagent,
     support_case_subagent,
 )
 from community_assistant.models import get_model
 
-FRONT_DOOR_PROMPT = """\
+ORCHESTRATOR_PROMPT = """\
 You are the Acme Community Assistant. You help Acme customers and partners get \
 answers, join discussions, and get support. You are friendly, concise and accurate.
 
@@ -80,26 +80,24 @@ tools. Just route, then answer.
 """
 
 
-def build_front_door(
+def build_orchestrator(
     model: BaseChatModel | None = None,
-    *,
-    support_case: CompiledSubAgent | None = None,
 ) -> CompiledStateGraph:
-    """Build the front door. ``model`` and ``support_case`` are injectable for tests."""
+    """Build the orchestrator. Uses ``get_model()`` unless a model is passed."""
     return create_deep_agent(
         model or get_model(),
         tools=[flaky_community_search],
-        system_prompt=FRONT_DOOR_PROMPT,
-        middleware=front_door_middleware(),
+        system_prompt=ORCHESTRATOR_PROMPT,
+        middleware=orchestrator_middleware(),
         subagents=[
             knowledge_subagent,
             forum_subagent,
-            support_case or support_case_subagent(),
+            support_case_subagent(),
             customer_success_subagent(),
         ],
         context_schema=UserContext,
-        name="community_front_door",
+        name="community_orchestrator",
     )
 
 
-graph = build_front_door()
+graph = build_orchestrator()

@@ -6,7 +6,7 @@
 * Customer Success is only called over A2A (``customer_success_subagent`` and
   ``fetch_agent_card``), so it could be any agent that supports A2A.
 
-The front door calls both through ``task``, like any local subagent. Only the runnable
+The orchestrator calls both through ``task``, like any local subagent. Only the runnable
 behind each one knows how to reach it.
 """
 
@@ -83,7 +83,7 @@ class ContextForwardingRemoteGraph(RemoteGraph):
       stays the same when that task resumes, changes for each later delegation, and differs
       between parallel ``task`` calls. So old history and old approvals never carry over,
       and parallel calls don't share a thread.
-    * Each remote interrupt is raised again in the front door with ``interrupt()``. On
+    * Each remote interrupt is raised again in the orchestrator with ``interrupt()``. On
       resume, ``task`` runs again. The remote thread is still paused, so nothing new is
       sent, and the user's decision goes to that thread as ``Command(resume=...)``. If the
       remote agent pauses again (for example, it proposes a new case after a rejection),
@@ -103,7 +103,7 @@ class ContextForwardingRemoteGraph(RemoteGraph):
         parent = _ambient_config().get("configurable", {})
         meta = {**(config or {}).get("configurable", {}), **(config or {}).get("metadata", {})}
         if parent.get("thread_id"):
-            meta["front_door_thread_id"] = parent["thread_id"]  # also lands on the remote thread
+            meta["orchestrator_thread_id"] = parent["thread_id"]  # also lands on the remote thread
             thread_id = remote_thread_id(parent["thread_id"], parent.get("checkpoint_ns", ""))
         else:
             thread_id = str(uuid.uuid4())
@@ -161,7 +161,7 @@ class ContextForwardingRemoteGraph(RemoteGraph):
         for value in answered:
             interrupt(value)  # replay: returns the decision already applied remotely
         while pending:
-            decision = interrupt(pending[0])  # pauses the front door until the user answers
+            decision = interrupt(pending[0])  # pauses the orchestrator until the user answers
             out = super().invoke(Command(resume=decision), cfg, context=context, **kwargs)
             pending = self._pending(out)
         return self._result(out)
@@ -242,7 +242,7 @@ class A2AError(RuntimeError):
     """The A2A call failed: a network error, a JSON-RPC error, or a reply with no text.
 
     The subagent retries once when this happens. If it fails again, the error comes out of
-    the ``task`` call and the front door's tool middleware turns it into the localized
+    the ``task`` call and the orchestrator's tool middleware turns it into the localized
     failure message.
     """
 
@@ -366,8 +366,8 @@ def ask_customer_success(question: str, context: Any) -> str:
 
 
 def _delegate(state: dict) -> dict:
-    # This runs inside the front door's ``task`` call, so ``get_runtime()`` returns the
-    # front door's runtime, which has the user context.
+    # This runs inside the orchestrator's ``task`` call, so ``get_runtime()`` returns the
+    # orchestrator's runtime, which has the user context.
     question = state["messages"][-1].text
     return {"messages": [AIMessage(ask_customer_success(question, get_runtime().context))]}
 

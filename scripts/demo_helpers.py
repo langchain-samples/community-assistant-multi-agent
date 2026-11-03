@@ -1,7 +1,7 @@
-"""Helpers for driving the live front door (shared by ``smoke_test.py`` and ``demo.ipynb``).
+"""Helpers for driving the live orchestrator (shared by ``smoke_test.py`` and ``demo.ipynb``).
 
-Every scenario runs on a fresh thread on the front door server (default
-``http://127.0.0.1:2024``, override with ``FRONT_DOOR_URL``), with one of the
+Every scenario runs on a fresh thread on the orchestrator server (default
+``http://127.0.0.1:2024``, override with ``ORCHESTRATOR_URL``), with one of the
 ``DEMO_USERS`` as the run's context. A turn either finishes with an answer or
 pauses on an interrupt (a clarification question or an approval request); pass
 the user's reply to ``resume``.
@@ -18,8 +18,8 @@ from langgraph_sdk import get_sync_client
 
 from community_assistant.context import DEMO_USERS
 
-FRONT_DOOR_URL = os.environ.get("FRONT_DOOR_URL", "http://127.0.0.1:2024")
-ASSISTANT_ID = "front_door"
+ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://127.0.0.1:2024")
+ASSISTANT_ID = "orchestrator"
 APPROVE = {"decisions": [{"type": "approve"}]}
 REJECT = {"decisions": [{"type": "reject"}]}
 
@@ -29,7 +29,7 @@ _client = None
 def client():
     global _client
     if _client is None:
-        _client = get_sync_client(url=FRONT_DOOR_URL)
+        _client = get_sync_client(url=ORCHESTRATOR_URL)
     return _client
 
 
@@ -46,7 +46,7 @@ def message_text(message: dict) -> str:
 
 @dataclass
 class Turn:
-    """What one front door turn produced, read back from the thread's state."""
+    """What one orchestrator turn produced, read back from the thread's state."""
 
     thread_id: str
     user: str
@@ -69,7 +69,7 @@ class Turn:
 
     @property
     def calls(self) -> list[str]:
-        """Specialists the front door called, in order: ``task:<subagent>`` or a tool name."""
+        """Specialists the orchestrator called, in order: ``task:<subagent>`` or a tool name."""
         out = []
         for m in self.messages:
             for tc in m.get("tool_calls") or ():

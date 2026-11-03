@@ -1,7 +1,7 @@
 """End-to-end smoke test: every demo scenario against the live servers, real model.
 
 Start the servers first (``make dev-all``), then ``make smoke``. Each scenario runs
-on a fresh front door thread with metadata ``{"scenario": "<n>-<slug>"}`` so its
+on a fresh orchestrator thread with metadata ``{"scenario": "<n>-<slug>"}`` so its
 trace is easy to find in LangSmith. Prints PASS/FAIL per scenario and exits
 non-zero if any fail.
 """

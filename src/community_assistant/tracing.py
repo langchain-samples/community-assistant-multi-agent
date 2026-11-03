@@ -1,6 +1,6 @@
 """Add a remote agent's runs to the caller's LangSmith trace.
 
-The front door sends LangSmith distributed tracing headers with every remote call
+The orchestrator sends LangSmith distributed tracing headers with every remote call
 (``RemoteGraph(distributed_tracing=True)`` for Support Case, and ``langsmith-trace`` and
 ``baggage`` on the A2A request for Customer Success). The Agent Server copies them into
 the run's ``config["configurable"]`` as ``langsmith-trace`` plus the ``langsmith-project``,
@@ -10,7 +10,7 @@ showed up in LangSmith as its own separate trace.
 
 ``continue_caller_trace(graph)`` fixes this on the receiving side. It returns a graph
 factory that the Agent Server enters for each run. During the run, the caller's trace
-is set as the parent, so the remote run appears under the front door's call and the
+is set as the parent, so the remote run appears under the orchestrator's call and the
 whole request is one trace. Requests without the header (from Studio, or direct calls)
 are traced the same as before.
 """

@@ -1,10 +1,10 @@
-"""A demo tool for showing how the front door handles tool failures.
+"""A demo tool for showing how the orchestrator handles tool failures.
 
 ``flaky_community_search`` pretends to be a community search backend that sometimes
 fails. What it does depends on a marker in the query:
 
 * ``"[flaky]"``: the first call in each conversation (thread) fails and later calls
-  work. The front door retries once, so the user doesn't notice, and every new
+  work. The orchestrator retries once, so the user doesn't notice, and every new
   thread shows the retry again. Outside a run there's no thread, so a single
   process-wide key is used.
 * ``"[down]"``: every call fails. After the retry, the user gets the standard
@@ -32,11 +32,6 @@ _flaky_failed: set[str] = set()  # conversations whose first [flaky] call alread
 
 class CommunitySearchUnavailable(RuntimeError):
     """The (mock) community search backend did not answer."""
-
-
-def reset_flaky_state() -> None:
-    """Make the next ``[flaky]`` call fail again everywhere, as in a fresh process."""
-    _flaky_failed.clear()
 
 
 def _flaky_key() -> str:
