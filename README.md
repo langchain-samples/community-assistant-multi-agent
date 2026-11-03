@@ -19,12 +19,13 @@ every subagent, including the remote ones, and each one applies its own access r
 
 ## Choosing how to connect a subagent
 
-| | LangGraph workflow, in process | `RemoteGraph` | A2A |
-|---|---|---|---|
-| Owner | your team | another team | another team or vendor |
-| What the subagent is built with | LangGraph, in your codebase | LangGraph, on its own Agent Server | anything that supports A2A |
-| Keeps threads and interrupts | yes | yes | no, it's one message in and one reply out |
-| Good fit when | you own the code and deploy it together | the other team also uses LangGraph | you can't count on LangGraph on the other side |
+| | Config-defined subagent | LangGraph workflow, in process | `RemoteGraph` | A2A |
+|---|---|---|---|---|
+| Example here | `forum_post` | `knowledge` | `support_case` | `customer_success` |
+| Owner | your team | your team | another team | another team or vendor |
+| What the subagent is built with | a prompt and tools; Deep Agents builds the agent | LangGraph, in your codebase | LangGraph, on its own Agent Server | anything that supports A2A |
+| Keeps threads and interrupts | yes | yes | yes | no, it's one message in and one reply out |
+| Good fit when | the model should decide the steps | the steps are fixed and must always run | the other team also uses LangGraph | you can't count on LangGraph on the other side |
 
 ## Notes
 
