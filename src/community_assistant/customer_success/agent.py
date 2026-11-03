@@ -1,14 +1,12 @@
 """Customer Success agent.
 
-Stands in for a team that does not build on LangGraph. The front door treats it as
-any A2A-compliant agent: it discovers it from its agent card and talks to it only
-over the A2A protocol (JSON-RPC ``message/send``). That this one happens to be
-served by an Agent Server (``langgraph.customer_success.json``, whose built-in A2A
-endpoint is used) is an implementation detail the front door does not rely on.
+This plays the part of a team that doesn't use LangGraph. The front door only talks
+to it over A2A: it reads the agent card and sends JSON-RPC ``message/send`` requests.
+It happens to run on an Agent Server here (``langgraph.customer_success.json``), but
+the front door doesn't depend on that.
 
-The agent card's name comes from the graph ``name`` below, and its description
-from the graph's ``description`` in ``langgraph.customer_success.json``. The
-training catalog is mocked in memory.
+The agent card takes its name from the graph ``name`` below and its description from
+``langgraph.customer_success.json``. The training catalog is mock data.
 """
 
 from __future__ import annotations
@@ -69,6 +67,6 @@ def build_customer_success_agent(model: BaseChatModel | None = None):
 
 
 graph = build_customer_success_agent()
-# What the server serves (see langgraph.customer_success.json): the same graph, joined to the
-# caller's LangSmith trace when the request carries one.
+# The server loads this (see langgraph.customer_success.json). It's the same graph, but
+# its runs are added to the caller's LangSmith trace when the request includes one.
 make_graph = continue_caller_trace(graph)

@@ -1,16 +1,16 @@
-"""Demo-only tools for showing the front door's retry and failure handling.
+"""A demo tool for showing how the front door handles tool failures.
 
-``flaky_community_search`` stands in for a community search backend with scripted
-outages, keyed by markers in the query:
+``flaky_community_search`` pretends to be a community search backend that sometimes
+fails. What it does depends on a marker in the query:
 
-* ``"[flaky]"``: fails on the first such call in each conversation (thread), then
-  works. The front door's tool retry (``max_retries=1``) recovers without the user
-  noticing, and every new demo thread shows that retry again. Outside a run there
-  is no thread, so one process-wide key is used.
-* ``"[down]"``: always fails. After the retry, the user gets the hard-failure copy
-  in their locale.
+* ``"[flaky]"``: the first call in each conversation (thread) fails and later calls
+  work. The front door retries once, so the user doesn't notice, and every new
+  thread shows the retry again. Outside a run there's no thread, so a single
+  process-wide key is used.
+* ``"[down]"``: every call fails. After the retry, the user gets the standard
+  failure message in their language.
 
-Anything else returns a short canned result.
+Any other query returns a short canned result.
 """
 
 from __future__ import annotations

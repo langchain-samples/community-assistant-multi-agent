@@ -1,12 +1,12 @@
-"""Front-door middleware: the flat graph's guard nodes, expressed as middleware.
+"""Front door middleware.
 
-Node -> middleware mapping (a flat LangGraph graph -> this demo):
+In a single flat graph, these checks are usually separate nodes. Here they're middleware:
 
-* ``safety_check`` node            -> ``SafetyMiddleware``
-* ``broadness_check`` + follow-up  -> ``BroadnessMiddleware`` (uses ``interrupt``)
-* retry-once-then-error node       -> ``LocalizedToolRetryMiddleware``
+* the ``safety_check`` node becomes ``SafetyMiddleware``
+* ``broadness_check`` and its follow-up become ``BroadnessMiddleware``, which uses ``interrupt``
+* retry-once-then-error becomes ``LocalizedToolRetryMiddleware``
 
-``user_context_prompt`` is plumbing, not a guard: it tells the model the user's locale.
+``user_context_prompt`` isn't a check. It just tells the model the user's name and locale.
 
 Pass ``front_door_middleware()`` to ``create_deep_agent(middleware=...)``.
 """
@@ -33,10 +33,10 @@ from community_assistant.localization import REFUSAL_COPY, failure_message
 
 logger = logging.getLogger(__name__)
 
-# Tools that are safe to call twice. A ``task`` delegation is not: it re-runs a whole
-# subagent (and its side effects, such as an approval or a created case), so a
-# subagent retries inside itself if it's safe to. Other tools still get the localized
-# failure message, just without a retry.
+# Tools that are safe to call twice. ``task`` isn't one of them: retrying it would run
+# the whole subagent again, including things like an approval or a new case. A subagent
+# can retry internally when that's safe. Errors from other tools still become the
+# localized failure message, they just aren't retried.
 RETRIED_TOOLS = ("flaky_community_search",)
 
 UNSAFE_PATTERNS = ("ignore previous instructions", "social security number", "how do i hack")
@@ -74,7 +74,7 @@ def _refusal() -> dict[str, Any]:
 
 
 class SafetyMiddleware(AgentMiddleware):
-    """Replaces the ``safety_check`` node: input guard before, output guard after."""
+    """Replaces the ``safety_check`` node. Checks the input before the run and the answer after it."""
 
     @hook_config(can_jump_to=["end"])
     def before_agent(self, state, runtime) -> dict[str, Any] | None:
@@ -92,12 +92,12 @@ class SafetyMiddleware(AgentMiddleware):
 
 
 class BroadnessMiddleware(AgentMiddleware):
-    """Replaces ``broadness_check`` + the follow-up node.
+    """Replaces ``broadness_check`` and its follow-up node.
 
-    Pauses the run with ``interrupt`` and asks for detail. On resume LangGraph
-    re-runs this hook and ``interrupt`` returns the user's reply, which is
-    appended to the conversation exactly once (the first pass never returned a
-    state update, so nothing was persisted).
+    If the request is too vague, it pauses the run with ``interrupt`` and asks for more
+    detail. When the run resumes, LangGraph runs this hook again and ``interrupt`` returns
+    the user's reply. The reply is added to the conversation only once, because the first
+    pass never returned a state update.
     """
 
     @hook_config(can_jump_to=["end"])
@@ -127,14 +127,13 @@ def localized_tool_error(exc: Exception, request: Any) -> str:
 
 
 class LocalizedToolRetryMiddleware(ToolRetryMiddleware):
-    """Retry a failing tool, then return a localized ``ToolMessage``.
+    """Retries a failing tool, then returns a ``ToolMessage`` in the user's language.
 
-    ``ToolRetryMiddleware(on_failure=callable)`` only receives the exception,
-    so it cannot see the user's locale (held in ``request.runtime.context``).
-    This thin subclass keeps the built-in retry/backoff loop (``on_failure="error"``
-    re-raises after the last attempt) and converts the final error here, where
-    the request is available. Tools outside ``tools=[...]`` are not retried, but
-    their errors are converted the same way.
+    ``ToolRetryMiddleware(on_failure=callable)`` only gets the exception, so it can't see
+    the user's locale in ``request.runtime.context``. This subclass keeps the built-in
+    retry loop (``on_failure="error"`` re-raises after the last attempt) and converts the
+    final error here, where the request is available. Tools that aren't in ``tools=[...]``
+    aren't retried, but their errors are converted the same way.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -169,7 +168,7 @@ class LocalizedToolRetryMiddleware(ToolRetryMiddleware):
 
 @dynamic_prompt
 def user_context_prompt(request: ModelRequest) -> str:
-    """Runtime context -> prompt: tell the model who the user is and which language to reply in."""
+    """Adds the user's name and locale to the system prompt, and asks the model to reply in that language."""
     base = request.system_message.text if request.system_message else ""
     try:
         user = require_user_context(request.runtime.context)

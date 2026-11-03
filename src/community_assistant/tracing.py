@@ -1,18 +1,18 @@
-"""Continue the caller's LangSmith trace inside a separately served agent.
+"""Add a remote agent's runs to the caller's LangSmith trace.
 
-The front door sends LangSmith distributed-tracing headers with every remote call
-(``RemoteGraph(distributed_tracing=True)`` for Support Case, ``langsmith-trace`` and
-``baggage`` on the A2A request for Customer Success). The Agent Server copies them
-into the run's ``config["configurable"]`` (``langsmith-trace`` plus the parsed
-``langsmith-project`` / ``langsmith-metadata`` / ``langsmith-tags`` baggage), but in
-the server version pinned here nothing turns them back into a trace parent: the
-remote run was logged as its own, unconnected trace (verified against LangSmith).
+The front door sends LangSmith distributed tracing headers with every remote call
+(``RemoteGraph(distributed_tracing=True)`` for Support Case, and ``langsmith-trace`` and
+``baggage`` on the A2A request for Customer Success). The Agent Server copies them into
+the run's ``config["configurable"]`` as ``langsmith-trace`` plus the ``langsmith-project``,
+``langsmith-metadata`` and ``langsmith-tags`` values from baggage. But in the server
+version this repo uses, nothing turns them back into a trace parent, so each remote run
+showed up in LangSmith as its own separate trace.
 
-``continue_caller_trace(graph)`` closes that gap on the receiving side. It returns a
-graph factory, which the Agent Server enters around each run. While the run is in
-progress, the forwarded parent is the LangSmith tracing context, so the remote run
-nests under the front door's tool call and the whole request is one trace. Requests
-without the header (Studio, direct calls) are traced as before.
+``continue_caller_trace(graph)`` fixes this on the receiving side. It returns a graph
+factory that the Agent Server enters for each run. During the run, the caller's trace
+is set as the parent, so the remote run appears under the front door's call and the
+whole request is one trace. Requests without the header (from Studio, or direct calls)
+are traced the same as before.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def caller_trace_context(config: RunnableConfig | None) -> contextlib.AbstractCo
     kwargs: dict[str, Any] = {}
     if project := configurable.get("langsmith-project"):
         kwargs["project_name"] = project
-    try:  # parse up front: tracing must never break the run
+    try:  # parse it first, so a bad header can't break the run
         kwargs["parent"] = RunTree.from_dotted_order(parent, **kwargs)
     except Exception:
         logger.warning("ignoring malformed %s header; tracing this run on its own", TRACE_KEY)

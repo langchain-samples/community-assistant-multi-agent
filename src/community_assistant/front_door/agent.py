@@ -1,15 +1,15 @@
-"""Community front door: the top-level orchestrator (a deep agent).
+"""The front door: the main Deep Agents agent.
 
-It routes each request to a subagent. The orchestrator sees four subagents the same
-way; what's behind each one differs:
+It hands each request to one of four subagents. The front door calls them all the
+same way, through ``task``, but each is built differently:
 
-* ``knowledge``         a compiled LangGraph workflow (retrieval + citations)
-* ``forum_post``        a prompt and tools, with a human-in-the-loop approval
-* ``support_case``      another team's LangGraph agent, over the network (RemoteGraph)
-* ``customer_success``  another team's agent on any stack, over A2A
+* ``knowledge``: a LangGraph workflow (retrieval with citations)
+* ``forum_post``: a prompt and tools, with an approval step
+* ``support_case``: another team's LangGraph agent on its own server (RemoteGraph)
+* ``customer_success``: another team's agent, which could be on any stack (A2A)
 
-Safety, clarification and retry/failure handling live in middleware
-(``front_door_middleware``), not in this prompt.
+Safety checks, clarifying questions and retries are handled by middleware
+(``front_door_middleware``), not by the prompt.
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
-"""Knowledge subagent: a compiled LangGraph StateGraph used as a CompiledSubAgent.
+"""Knowledge subagent: a LangGraph workflow used as a ``CompiledSubAgent``.
 
-Pipeline: retrieve -> filter_by_entitlement -> answer_with_citations.
-Entitlement filtering reads the per-request UserContext from the LangGraph
-runtime, so the same graph is safe to run standalone or as a Deep Agents subagent.
+The steps are retrieve, then filter_by_entitlement, then answer_with_citations. The
+filter reads the user's ``UserContext`` from the LangGraph runtime, so the graph works
+the same whether it runs on its own or as a subagent.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def _make_answer_node(model: BaseChatModel | None):
         docs = state["docs"]
         if not docs:
             return {"messages": [AIMessage(content=NO_ACCESS_MESSAGE)]}
-        # Lazy resolution: no API key is needed to import/build the graph.
+        # Look up the model here so importing or building the graph doesn't need an API key.
         llm = model or get_model()
         context = "\n\n".join(f"[{i}] {d['title']}\n{d['body']}" for i, d in enumerate(docs, 1))
         reply = llm.invoke(

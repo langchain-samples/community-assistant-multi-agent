@@ -1,13 +1,13 @@
-"""Agents owned by other teams, reached over the network.
+"""Subagents owned by other teams, called over the network.
 
-* Support Case runs on its own Agent Server (``langgraph.support_case.json``) and
-  is reached through ``RemoteGraph``. Moving it to LangSmith Deployment needs only
+* Support Case runs on its own Agent Server (``langgraph.support_case.json``) and is
+  called with ``RemoteGraph``. To move it to LangSmith Deployment you only need to set
   ``SUPPORT_CASE_URL`` and ``LANGSMITH_API_KEY``.
-* Customer Success is reached only through the A2A protocol (``customer_success_subagent``
-  and ``fetch_agent_card``), so it can be any A2A-compliant agent, on any stack.
+* Customer Success is only called over A2A (``customer_success_subagent`` and
+  ``fetch_agent_card``), so it could be any agent that supports A2A.
 
-Both are deep-agent subagents: the front door delegates to them with ``task`` like any
-local subagent, and only the runnable behind each one knows how to reach it.
+The front door calls both through ``task``, like any local subagent. Only the runnable
+behind each one knows how to reach it.
 """
 
 from __future__ import annotations
@@ -63,44 +63,40 @@ def _ambient_config() -> dict:
 
 
 class ContextForwardingRemoteGraph(RemoteGraph):
-    """RemoteGraph that carries identity and approvals across the network boundary.
+    """A RemoteGraph that passes the user's identity and approvals across the network.
 
-    Identity: the parent's runtime context does not travel over the network on its
-    own. A deep agent's ``task`` tool calls ``invoke(state, config)`` without
-    ``context``, so the remote run would see no user. The user context is forwarded
-    here, explicitly and by design. The remote server then enforces its own access
-    rules on that context. The Agent Server rejects requests that set both
-    ``configurable`` and ``context``, so the task tool's ``configurable`` keys are
-    moved into metadata.
+    Identity: the runtime context doesn't cross the network by itself. The ``task`` tool
+    calls ``invoke(state, config)`` without ``context``, so the remote run wouldn't know
+    who the user is. This class sends the user context explicitly, and the remote server
+    applies its own access rules to it. The Agent Server rejects a request that has both
+    ``configurable`` and ``context``, so the ``configurable`` keys from ``task`` are moved
+    into metadata.
 
-    Approvals: we tried the plain RemoteGraph-as-subagent path first, and the remote
-    ``create_case`` approval could not round-trip through ``task``. The task tool
-    passes no ``thread_id`` (so the remote run is stateless) and no
-    ``checkpoint_ns``, so RemoteGraph returns the remote interrupt as data instead
-    of raising it. A resume would then send a fresh message, not ``Command(resume)``.
-    So this runnable manages the remote thread itself and resumes it with
-    ``Command(resume=...)``, and Support Case stays a ``CompiledSubAgent``:
+    Approvals: with a plain RemoteGraph as the subagent, the remote ``create_case`` approval
+    couldn't make it back through ``task``. ``task`` passes no ``thread_id``, so the remote
+    run has no thread, and no ``checkpoint_ns``, so RemoteGraph returns the remote interrupt
+    as data instead of raising it. Resuming would then send a new message rather than
+    ``Command(resume)``. So this class manages the remote thread itself:
 
-    * One remote thread per delegation, keyed by the parent ``thread_id`` plus the
-      ambient ``checkpoint_ns`` of the ``task`` tool call (``tools:<task id>``).
-      Verified empirically: the ns is identical when that same task is resumed,
-      new for every later delegation, and distinct for parallel ``task`` calls. So
-      no stale history or stale approvals carry over, and parallel calls don't
-      collide on one remote thread.
-    * Each remote interrupt is re-raised in the front door with ``interrupt()``.
-      On resume, ``task`` runs again: the remote thread is still paused, so nothing
-      new is sent, and the user's decision goes as ``Command(resume=...)`` to that
-      same thread. If the remote pauses again (e.g. it re-proposes after a reject),
-      that approval is raised too. LangGraph matches resume values to
-      ``interrupt()`` calls by order, so on each re-run the remote interrupts
-      already answered (read from the remote thread's history) are replayed first.
+    * Each delegation gets its own remote thread, based on the parent ``thread_id`` and the
+      ``checkpoint_ns`` of the ``task`` call (``tools:<task id>``). We checked that the ns
+      stays the same when that task resumes, changes for each later delegation, and differs
+      between parallel ``task`` calls. So old history and old approvals never carry over,
+      and parallel calls don't share a thread.
+    * Each remote interrupt is raised again in the front door with ``interrupt()``. On
+      resume, ``task`` runs again. The remote thread is still paused, so nothing new is
+      sent, and the user's decision goes to that thread as ``Command(resume=...)``. If the
+      remote agent pauses again (for example, it proposes a new case after a rejection),
+      that approval is raised too. LangGraph matches resume values to ``interrupt()`` calls
+      in order, so each re-run first replays the remote interrupts that were already
+      answered, read from the remote thread's history.
     * Only messages from the current remote turn are returned.
-    * A remote thread found with nothing pending must hold a finished turn. If it
-      doesn't (the earlier remote run failed part-way), ``RemoteRunIncomplete`` is
-      raised, so the front door reports a localized failure instead of an empty answer.
+    * If a remote thread has nothing pending, its last turn should have finished. If it
+      didn't (the earlier remote run failed partway), this raises ``RemoteRunIncomplete``,
+      so the user gets the localized failure message instead of an empty answer.
 
-    Only ``invoke``/``ainvoke`` are overridden: they are what ``task`` calls. A
-    direct ``.stream()`` gets plain RemoteGraph behaviour.
+    Only ``invoke`` and ``ainvoke`` are overridden, since those are what ``task`` calls.
+    Calling ``.stream()`` directly behaves like a normal RemoteGraph.
     """
 
     def _prepare(self, config, context):
@@ -145,7 +141,7 @@ class ContextForwardingRemoteGraph(RemoteGraph):
 
     @staticmethod
     def _result(out: dict) -> dict:
-        # Only this turn's conversation crosses back; other remote state stays private.
+        # Only return this turn's messages. The rest of the remote state stays on the remote side.
         messages = convert_to_messages(out.get("messages", []))
         humans = [n for n, m in enumerate(messages) if m.type == "human"]
         return {"messages": messages[humans[-1] + 1 :] if humans else messages}
@@ -207,31 +203,30 @@ def support_case_subagent() -> CompiledSubAgent:
 # ---------------------------------------------------------------------------
 # Customer Success: A2A
 #
-# A2A JSON-RPC ``message/send`` over HTTP, so the remote side can be any
-# A2A-compliant agent. The user context is sent twice:
+# A2A JSON-RPC ``message/send`` over HTTP, so the remote side can be any agent that
+# supports A2A. The user context is sent in two places:
 #
-# * ``message.metadata["user_context"]``: standard A2A, for any agent on any stack.
-# * ``params.context``: an Agent Server extension to A2A (not in the A2A spec). The
-#   Agent Server maps it to the run's context, so it arrives as ``runtime.context``
-#   in the remote tools. Other A2A agents ignore it.
+# * ``message.metadata["user_context"]``: standard A2A, so any agent can read it.
+# * ``params.context``: an Agent Server addition that isn't in the A2A spec. The Agent
+#   Server turns it into the run's context, so the remote tools see it as
+#   ``runtime.context``. Other A2A agents ignore it.
 # ---------------------------------------------------------------------------
 
 CUSTOMER_SUCCESS_URL = os.environ.get("CUSTOMER_SUCCESS_URL", "http://127.0.0.1:2026")
-# Endpoint: ``CUSTOMER_SUCCESS_A2A_URL`` (read per call) is the agent's full A2A
-# endpoint, used as is. Set it for any real A2A agent (take the URL from its agent
-# card or docs) and for a non-default assistant on LangSmith Deployment.
+# Endpoint: ``CUSTOMER_SUCCESS_A2A_URL`` (read on each call) is the agent's full A2A
+# endpoint and is used as is. Set it for a real A2A agent (the URL is in its agent card
+# or docs) or for a non-default assistant on LangSmith Deployment.
 #
-# Unset, ``{CUSTOMER_SUCCESS_URL}/a2a/{CUSTOMER_SUCCESS_AGENT_ID}`` is computed. That
-# is a local-dev convenience that relies on how the Agent Server derives the
-# default assistant's id: it addresses A2A agents by assistant UUID, not graph id
-# (verified: ``/a2a/customer_success`` is rejected with "Invalid assistant ID: must
-# be a UUID"), and a graph's default assistant is uuid5 of the graph id in the
-# server's graph namespace.
+# If it isn't set, we build ``{CUSTOMER_SUCCESS_URL}/a2a/{CUSTOMER_SUCCESS_AGENT_ID}``.
+# That's a shortcut for local dev. The Agent Server addresses A2A agents by assistant
+# UUID, not graph name (``/a2a/customer_success`` is rejected with "Invalid assistant ID:
+# must be a UUID"), and a graph's default assistant ID is the uuid5 of the graph name in
+# the server's graph namespace.
 #
-# Agent card: ``CUSTOMER_SUCCESS_AGENT_CARD_URL`` (read per call) if set, else the
-# Agent Server's per-assistant card at ``{endpoint}/.well-known/agent-card.json``.
-# (The Agent Server's root ``/.well-known/agent-card.json`` needs an ``assistant_id``
-# query parameter, so it is not used as the default.)
+# Agent card: ``CUSTOMER_SUCCESS_AGENT_CARD_URL`` (read on each call) if it's set,
+# otherwise the per-assistant card at ``{endpoint}/.well-known/agent-card.json``. The
+# Agent Server's root ``/.well-known/agent-card.json`` needs an ``assistant_id`` query
+# parameter, so we don't use it as the default.
 _AGENT_SERVER_GRAPH_NAMESPACE = uuid.UUID("6ba7b821-9dad-11d1-80b4-00c04fd430c8")
 CUSTOMER_SUCCESS_AGENT_ID = str(uuid.uuid5(_AGENT_SERVER_GRAPH_NAMESPACE, "customer_success"))
 A2A_TIMEOUT = httpx.Timeout(60.0, connect=5.0)  # a remote agent turn can include model calls
@@ -244,10 +239,11 @@ _AGENT_ROLES = {"agent", "ROLE_AGENT"}
 
 
 class A2AError(RuntimeError):
-    """The A2A call failed: transport error, JSON-RPC error, or no usable reply.
+    """The A2A call failed: a network error, a JSON-RPC error, or a reply with no text.
 
-    The subagent retries once on it. A second failure propagates out of the ``task``
-    call, and the front door's tool middleware turns it into the localized failure message.
+    The subagent retries once when this happens. If it fails again, the error comes out of
+    the ``task`` call and the front door's tool middleware turns it into the localized
+    failure message.
     """
 
 
@@ -270,25 +266,24 @@ def _agent_card_url() -> str:
 def _auth_headers() -> dict[str, str]:
     """``x-api-key`` for the Customer Success endpoint, only if ``CUSTOMER_SUCCESS_API_KEY`` is set.
 
-    Deliberately not defaulted to LANGSMITH_API_KEY: the A2A endpoint may belong to a third
-    party, and a key must never go to an endpoint it wasn't meant for.
+    This doesn't fall back to LANGSMITH_API_KEY on purpose. The A2A endpoint might belong
+    to a third party, and a key shouldn't be sent somewhere it wasn't meant for.
     """
     key = os.environ.get("CUSTOMER_SUCCESS_API_KEY")
     return {"x-api-key": key} if key else {}
 
 
 def _tracing_headers() -> dict[str, str]:
-    """LangSmith distributed-tracing headers for the current run, if one is active.
+    """LangSmith distributed tracing headers for the current run, if there is one.
 
-    The Agent Server copies ``langsmith-trace`` (and ``baggage``) from A2A requests
-    into the run's config, as on its other run routes. The receiving graph turns
-    that back into the trace parent (``community_assistant.tracing``), which nests
-    the remote run under this tool call in LangSmith. Other A2A agents ignore
-    headers they don't know.
+    The Agent Server copies ``langsmith-trace`` (and ``baggage``) from A2A requests into
+    the run's config, the same as on its other run endpoints. The remote graph uses them
+    to continue our trace (see ``community_assistant.tracing``), so the remote run shows
+    up under this call in LangSmith. Other A2A agents ignore headers they don't recognize.
 
-    They go to whatever endpoint is configured. The trace id is no secret, but the
-    ``baggage`` header names your LangSmith project: drop these headers if the A2A
-    agent belongs to a third party you don't want to see that.
+    These headers go to whatever endpoint is configured. The trace ID isn't secret, but
+    ``baggage`` includes your LangSmith project name, so drop these headers if the A2A
+    agent belongs to a third party that shouldn't see it.
     """
     run_tree = get_current_run_tree()
     return run_tree.to_headers() if run_tree is not None else {}
@@ -299,11 +294,11 @@ def _text(parts) -> str:
 
 
 def _reply_text(task: dict) -> str:
-    """Text of the task's final agent message.
+    """Text of the agent's final message in the task.
 
-    A completed task carries the agent's final reply as its response artifact
-    (A2A section 3.7). Agents that answer in the status message, only in history,
-    or with a bare Message instead of a Task are covered too.
+    A completed task normally has the agent's reply as its artifact (A2A section 3.7).
+    This also handles agents that reply in the status message, only in the history, or
+    with a plain Message instead of a Task.
     """
     if task.get("kind") == "message":
         candidates = [_text(task.get("parts"))]
@@ -364,15 +359,15 @@ def ask_customer_success(question: str, context: Any) -> str:
     try:
         user = require_user_context(context)
     except PermissionError:
-        # Fail closed: nothing is sent without an identity, and a retry can't fix that.
+        # Without a user we send nothing, and retrying wouldn't help.
         logger.warning("customer_success called without a user context")
         return failure_message("en_US")
     return _send_message(question, user)  # raises A2AError
 
 
 def _delegate(state: dict) -> dict:
-    # Runs inside the front door's ``task`` call, so ``get_runtime()`` is the front
-    # door's runtime and carries the user context.
+    # This runs inside the front door's ``task`` call, so ``get_runtime()`` returns the
+    # front door's runtime, which has the user context.
     question = state["messages"][-1].text
     return {"messages": [AIMessage(ask_customer_success(question, get_runtime().context))]}
 
@@ -396,7 +391,7 @@ def customer_success_subagent() -> CompiledSubAgent:
 
 
 def fetch_agent_card() -> dict:
-    """Discover the Customer Success agent: GET its A2A agent card."""
+    """Fetch the Customer Success agent card over A2A."""
     with _http_client() as client:
         response = client.get(_agent_card_url(), headers=_auth_headers())
     response.raise_for_status()

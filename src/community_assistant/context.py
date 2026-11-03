@@ -15,9 +15,9 @@ class UserContext:
     locale: str = "en_US"
 
     def __post_init__(self) -> None:
-        # Context sent as JSON (the Agent Server API, A2A) arrives with lists. Store
-        # tuples so the declared types hold and Pydantic serializes it without warnings.
-        # A lone string is one value, not a sequence of characters (no substring checks).
+        # Context that comes in as JSON (through the Agent Server API or A2A) has lists.
+        # Store tuples so the types match and Pydantic doesn't warn when serializing.
+        # A single string is one value, not a list of characters.
         for name in ("roles", "entitlements", "purchased_products"):
             value = getattr(self, name)
             if isinstance(value, str):
@@ -30,7 +30,7 @@ class UserContext:
 
     @classmethod
     def from_dict(cls, d: dict) -> UserContext:
-        """Build from the JSON form. A malformed dict raises ``PermissionError`` (fail closed)."""
+        """Build from the JSON form. Raises ``PermissionError`` if the dict is malformed."""
         try:
             return cls(
                 user_id=d["user_id"],
@@ -66,7 +66,7 @@ DEMO_USERS: dict[str, UserContext] = {
 
 
 def require_user_context(runtime_context: UserContext | dict | None) -> UserContext:
-    """Return a UserContext from either form; fail closed (``PermissionError``) when absent or malformed."""
+    """Return a UserContext from either form. Raises ``PermissionError`` if it's missing or malformed."""
     if runtime_context is None:
         raise PermissionError("missing user context")
     if isinstance(runtime_context, UserContext):

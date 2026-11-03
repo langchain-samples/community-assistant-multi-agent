@@ -1,7 +1,7 @@
-"""Forum post subagent: draft a Community post, pause for human approval, then post.
+"""Forum post subagent: drafts a Community post, waits for the user to approve it, then posts.
 
-This stands in for a "task completion" flow. The posting tool is mocked; the
-human-in-the-loop interrupt is real and is enforced by ``interrupt_on``.
+This is an example of an agent that completes a task rather than just answering. The
+posting tool is fake, but the approval step is real (``interrupt_on``).
 """
 
 from __future__ import annotations

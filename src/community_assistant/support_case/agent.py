@@ -1,8 +1,8 @@
 """Support Case agent.
 
-Stands in for a separately owned and deployed agent (the "Support team"). The
-front door reaches it over the network via RemoteGraph; it is served on its own
-port from ``langgraph.support_case.json``. The case store is mocked in memory.
+This plays the part of an agent another team (the Support team) owns and deploys.
+The front door calls it over the network with RemoteGraph. It runs on its own port
+from ``langgraph.support_case.json``, and the cases are mock data kept in memory.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ NO_CREATE_NOTE = (
 
 FIRST_NEW_CASE_NUMBER = 1043
 
-# Mock case system of record: baseline cases plus anything created while running.
+# Mock case store: the starting cases plus any created while the server runs.
 CASES_STORE: dict[str, dict] = copy.deepcopy(CASES)
 _next_case_number = FIRST_NEW_CASE_NUMBER
 
@@ -97,13 +97,12 @@ def _can_create(context) -> bool:
 
 
 class RoleBasedToolAccess(AgentMiddleware):
-    """Role-based tool access: only offer create_case to users who may use it.
+    """Only offers ``create_case`` to users who are allowed to use it.
 
-    Human-in-the-loop interrupts right after the model responds, before the tool
-    body runs. Without this, a user lacking the role would be asked to approve a
-    call that is then denied. Hiding the tool from the model means they get a
-    plain refusal and no approval prompt. The check inside ``create_case`` stays
-    as defence in depth.
+    The approval interrupt happens right after the model responds, before the tool runs.
+    Without this middleware, a user without the role would be asked to approve a call that
+    then gets denied. With the tool hidden, they just get a refusal and no approval prompt.
+    ``create_case`` still checks the role itself as a backup.
     """
 
     def _filter(self, request):
@@ -151,6 +150,6 @@ def build_support_case_agent(model: BaseChatModel | None = None, checkpointer=No
 
 
 graph = build_support_case_agent()
-# What the server serves (see langgraph.support_case.json): the same graph, joined to the
-# caller's LangSmith trace when the request carries one.
+# The server loads this (see langgraph.support_case.json). It's the same graph, but
+# its runs are added to the caller's LangSmith trace when the request includes one.
 make_graph = continue_caller_trace(graph)
