@@ -1,0 +1,45 @@
+Makefile
+  s_49e87e495cf4de::t_856ed03fccfff6 1,3-4,16
+demo.ipynb
+  s_49e87e495cf4de::t_efd13dcb452c0c 23,36-39,90-93,110,136-139,147,151,153-155,157-159,190-193,201,223-226,234,238,240-244,246,252-254,279-282,290,299-300,303,335-338,346,350,352-354,356,383-386,394,435-438,446,452,467-470,478,482,507-510,518,522,525-526,529-530,532,559-562,570,574-575,577,580-583,585,587,593-599,628-631,639,643,645,663-666,674,680,708-711,719
+langgraph.orchestrator.json
+  s_49e87e495cf4de::t_43629ebb86fcb5 4-6
+pyproject.toml
+  s_49e87e495cf4de::t_47bf04bf6d04ac 8,20
+scripts/demo_helpers.py
+  s_49e87e495cf4de::t_835bb38b556bd3 1,3-4,21-22,32,49,72
+scripts/smoke_test.py
+  s_49e87e495cf4de::t_22334e1284842d 4
+src/community_assistant/customer_success/agent.py
+  s_49e87e495cf4de::t_6f9aff8c732b0d 3,6
+src/community_assistant/orchestrator/agent.py
+  s_49e87e495cf4de::t_b26b753523368f 1,3,12,17,22-26,32,83,86,90-91,95,99,103
+src/community_assistant/orchestrator/demo_tools.py
+  s_49e87e495cf4de::t_2509e5b1099361 1,7
+src/community_assistant/orchestrator/middleware.py
+  s_49e87e495cf4de::t_846d3a2efc9b28 1,11,183
+src/community_assistant/orchestrator/remote_agents.py
+  s_49e87e495cf4de::t_53306d9a4fdb61 9,86,106,164,245,369-370
+src/community_assistant/support_case/agent.py
+  s_49e87e495cf4de::t_7964960b02ce14 4,35
+src/community_assistant/tracing.py
+  s_49e87e495cf4de::t_51a5832c00ca3c 3,13
+uv.lock
+  s_49e87e495cf4de::t_fafc4b25b8d839 354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5587df0bd3766e308f462eb84463036afa5615a",
+  "prompts": {},
+  "sessions": {
+    "s_49e87e495cf4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77a1dc46-c631-44ef-8427-58a1b9019af2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Stephen Chu <stephen.chu@langchain.dev>"
+    }
+  }
+}
