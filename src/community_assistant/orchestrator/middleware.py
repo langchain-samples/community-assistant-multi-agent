@@ -4,7 +4,7 @@ In a single flat graph, these checks are usually separate nodes. Here they're mi
 
 * the ``safety_check`` node becomes ``SafetyMiddleware``
 * ``broadness_check`` and its follow-up become ``BroadnessMiddleware``, which uses ``interrupt``
-* retry-once-then-error becomes ``FriendlyToolRetryMiddleware``
+* retry-once-then-error becomes the built-in ``ToolRetryMiddleware`` and ``ToolErrorMiddleware``
 
 Pass ``orchestrator_middleware()`` to ``create_deep_agent(middleware=...)``.
 """
@@ -12,13 +12,16 @@ Pass ``orchestrator_middleware()`` to ``create_deep_agent(middleware=...)``.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
-from langchain.agents.middleware import AgentMiddleware, ToolRetryMiddleware, hook_config
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langgraph.errors import GraphBubbleUp
-from langgraph.types import Command, interrupt
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    ToolErrorMiddleware,
+    ToolRetryMiddleware,
+    hook_config,
+)
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.types import interrupt
 
 logger = logging.getLogger(__name__)
 
@@ -104,48 +107,20 @@ class BroadnessMiddleware(AgentMiddleware):
         return {"messages": [HumanMessage(reply_text)]}
 
 
-class FriendlyToolRetryMiddleware(ToolRetryMiddleware):
-    """Retries the tools in ``tools=[...]``, and turns any tool's final error into ``FAILURE_MESSAGE``.
-
-    The built-in ``ToolRetryMiddleware`` only handles the tools it retries, so an error from
-    any other tool (such as a failed ``task`` call to a remote subagent) would end the run
-    with the raw error. This subclass catches those too, so the user never sees one.
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(on_failure="error", **kwargs)
-
-    def _to_message(self, exc: Exception, request: Any) -> ToolMessage:
-        logger.exception("tool call failed", exc_info=exc)
-        return ToolMessage(
-            content=FAILURE_MESSAGE,
-            tool_call_id=request.tool_call["id"],
-            name=request.tool_call["name"],
-            status="error",
-        )
-
-    def wrap_tool_call(self, request, handler) -> ToolMessage | Command[Any]:
-        try:
-            return super().wrap_tool_call(request, handler)
-        except GraphBubbleUp:
-            raise
-        except Exception as exc:
-            return self._to_message(exc, request)
-
-    async def awrap_tool_call(
-        self, request, handler: Callable[..., Awaitable[ToolMessage | Command[Any]]]
-    ) -> ToolMessage | Command[Any]:
-        try:
-            return await super().awrap_tool_call(request, handler)
-        except GraphBubbleUp:
-            raise
-        except Exception as exc:
-            return self._to_message(exc, request)
+def friendly_tool_error(exc: Exception, request: Any) -> str:
+    """Log a tool's final error and give the model ``FAILURE_MESSAGE`` instead of the raw error."""
+    logger.exception("tool call failed", exc_info=exc)
+    return FAILURE_MESSAGE
 
 
 def orchestrator_middleware() -> list[AgentMiddleware]:
     return [
         SafetyMiddleware(),
         BroadnessMiddleware(),
-        FriendlyToolRetryMiddleware(tools=list(RETRIED_TOOLS), max_retries=1, initial_delay=0.2),
+        # Outer: any tool's error, including a failed ``task`` call, becomes FAILURE_MESSAGE.
+        ToolErrorMiddleware(on_error=friendly_tool_error),
+        # Inner: retry the safe tools once, then pass the error out to ToolErrorMiddleware.
+        ToolRetryMiddleware(
+            tools=list(RETRIED_TOOLS), max_retries=1, initial_delay=0.2, on_failure="error"
+        ),
     ]
