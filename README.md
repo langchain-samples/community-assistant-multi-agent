@@ -22,7 +22,7 @@ every subagent, including the remote ones, and each one applies its own access r
 | | LangGraph workflow, in process | `RemoteGraph` | A2A |
 |---|---|---|---|
 | Owner | your team | another team | another team or vendor |
-| Other side must run LangGraph | yes | yes | no |
+| What the subagent is built with | LangGraph, in your codebase | LangGraph, on its own Agent Server | anything that supports A2A |
 | Keeps threads and interrupts | yes | yes | no, it's one message in and one reply out |
 | Good fit when | you own the code and deploy it together | the other team also uses LangGraph | you can't count on LangGraph on the other side |
 
