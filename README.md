@@ -48,7 +48,7 @@ You'll need Python 3.11+ and [`uv`](https://docs.astral.sh/uv/).
 ```bash
 uv sync
 cp .env.example .env     # add your model provider key
-make dev-all             # front door :2024, Support Case :2025, Customer Success :2026
+make dev-all             # orchestrator :2024, Support Case :2025, Customer Success :2026
 ```
 
 The model defaults to Claude. To use another one, set `COMMUNITY_MODEL` to an
@@ -78,6 +78,6 @@ The other settings are in `.env.example`.
 
 ## Deploying
 
-Each `langgraph.*.json` file is its own LangSmith Deployment. On the front door, set
+Each `langgraph.*.json` file is its own LangSmith Deployment. On the orchestrator, set
 `SUPPORT_CASE_URL`, `CUSTOMER_SUCCESS_URL`, `CUSTOMER_SUCCESS_A2A_URL`, `LANGSMITH_API_KEY`
 and `CUSTOMER_SUCCESS_API_KEY`.
