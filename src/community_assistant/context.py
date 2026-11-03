@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)
@@ -12,7 +12,6 @@ class UserContext:
     roles: tuple[str, ...]
     entitlements: tuple[str, ...]
     purchased_products: tuple[str, ...]
-    locale: str = "en_US"
 
     def __post_init__(self) -> None:
         # Context that comes in as JSON (through the Agent Server API or A2A) has lists.
@@ -38,22 +37,19 @@ class UserContext:
                 roles=d.get("roles", ()),
                 entitlements=d.get("entitlements", ()),
                 purchased_products=d.get("purchased_products", ()),
-                locale=d.get("locale", "en_US"),
             )
         except (KeyError, TypeError, AttributeError) as exc:
             raise PermissionError(f"malformed user context: {exc!r}") from exc
 
 
-_ADMIN = UserContext(
-    user_id="u-1001",
-    display_name="Alex Morgan",
-    roles=("customer", "can_create_case"),
-    entitlements=("HCM", "Payroll"),
-    purchased_products=("Acme HCM", "Acme Payroll"),
-)
-
 DEMO_USERS: dict[str, UserContext] = {
-    "admin_customer": _ADMIN,
+    "admin_customer": UserContext(
+        user_id="u-1001",
+        display_name="Alex Morgan",
+        roles=("customer", "can_create_case"),
+        entitlements=("HCM", "Payroll"),
+        purchased_products=("Acme HCM", "Acme Payroll"),
+    ),
     "partner_readonly": UserContext(
         user_id="u-2002",
         display_name="Sam Rivera",
@@ -61,7 +57,6 @@ DEMO_USERS: dict[str, UserContext] = {
         entitlements=("HCM",),
         purchased_products=("Acme HCM",),
     ),
-    "fr_customer": replace(_ADMIN, user_id="u-3003", display_name="Camille Dubois", locale="fr_FR"),
 }
 
 

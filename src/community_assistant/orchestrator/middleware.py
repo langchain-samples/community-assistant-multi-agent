@@ -4,9 +4,7 @@ In a single flat graph, these checks are usually separate nodes. Here they're mi
 
 * the ``safety_check`` node becomes ``SafetyMiddleware``
 * ``broadness_check`` and its follow-up become ``BroadnessMiddleware``, which uses ``interrupt``
-* retry-once-then-error becomes ``LocalizedToolRetryMiddleware``
-
-``user_context_prompt`` isn't a check. It just tells the model the user's name and locale.
+* retry-once-then-error becomes ``FriendlyToolRetryMiddleware``
 
 Pass ``orchestrator_middleware()`` to ``create_deep_agent(middleware=...)``.
 """
@@ -17,26 +15,20 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from langchain.agents.middleware import (
-    AgentMiddleware,
-    ModelRequest,
-    ToolRetryMiddleware,
-    dynamic_prompt,
-    hook_config,
-)
+from langchain.agents.middleware import AgentMiddleware, ToolRetryMiddleware, hook_config
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.errors import GraphBubbleUp
 from langgraph.types import Command, interrupt
 
-from community_assistant.context import require_user_context
-from community_assistant.localization import REFUSAL_COPY, failure_message
-
 logger = logging.getLogger(__name__)
+
+FAILURE_MESSAGE = "Sorry, something went wrong on our side. Please try again in a moment."
+REFUSAL_MESSAGE = "I can't help with that request. If you need support, I can help you open a case."
 
 # Tools that are safe to call twice. ``task`` isn't one of them: retrying it would run
 # the whole subagent again, including things like an approval or a new case. A subagent
-# can retry internally when that's safe. Errors from other tools still become the
-# localized failure message, they just aren't retried.
+# can retry internally when that's safe. Errors from other tools still become
+# FAILURE_MESSAGE, they just aren't retried.
 RETRIED_TOOLS = ("flaky_community_search",)
 
 UNSAFE_PATTERNS = ("ignore previous instructions", "social security number", "how do i hack")
@@ -70,7 +62,7 @@ def _last_human_text(state: dict[str, Any]) -> str | None:
 
 
 def _refusal() -> dict[str, Any]:
-    return {"messages": [AIMessage(REFUSAL_COPY)], "jump_to": "end"}
+    return {"messages": [AIMessage(REFUSAL_MESSAGE)], "jump_to": "end"}
 
 
 class SafetyMiddleware(AgentMiddleware):
@@ -87,7 +79,7 @@ class SafetyMiddleware(AgentMiddleware):
         last = state["messages"][-1] if state["messages"] else None
         if isinstance(last, AIMessage) and is_unsafe(last.text):
             # Same id -> the add_messages reducer replaces the unsafe message.
-            return {"messages": [AIMessage(REFUSAL_COPY, id=last.id)]}
+            return {"messages": [AIMessage(REFUSAL_MESSAGE, id=last.id)]}
         return None
 
 
@@ -112,36 +104,21 @@ class BroadnessMiddleware(AgentMiddleware):
         return {"messages": [HumanMessage(reply_text)]}
 
 
-def _locale(request: Any) -> str:
-    ctx = getattr(getattr(request, "runtime", None), "context", None)
-    try:
-        return require_user_context(ctx).locale
-    except PermissionError:
-        return "en_US"
+class FriendlyToolRetryMiddleware(ToolRetryMiddleware):
+    """Retries the tools in ``tools=[...]``, and turns any tool's final error into ``FAILURE_MESSAGE``.
 
-
-def localized_tool_error(exc: Exception, request: Any) -> str:
-    """Log ``exc`` and return the hard-failure copy in the user's locale."""
-    logger.exception("tool call failed", exc_info=exc)
-    return failure_message(_locale(request))
-
-
-class LocalizedToolRetryMiddleware(ToolRetryMiddleware):
-    """Retries a failing tool, then returns a ``ToolMessage`` in the user's language.
-
-    ``ToolRetryMiddleware(on_failure=callable)`` only gets the exception, so it can't see
-    the user's locale in ``request.runtime.context``. This subclass keeps the built-in
-    retry loop (``on_failure="error"`` re-raises after the last attempt) and converts the
-    final error here, where the request is available. Tools that aren't in ``tools=[...]``
-    aren't retried, but their errors are converted the same way.
+    The built-in ``ToolRetryMiddleware`` only handles the tools it retries, so an error from
+    any other tool (such as a failed ``task`` call to a remote subagent) would end the run
+    with the raw error. This subclass catches those too, so the user never sees one.
     """
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(on_failure="error", **kwargs)
 
     def _to_message(self, exc: Exception, request: Any) -> ToolMessage:
+        logger.exception("tool call failed", exc_info=exc)
         return ToolMessage(
-            content=localized_tool_error(exc, request),
+            content=FAILURE_MESSAGE,
             tool_call_id=request.tool_call["id"],
             name=request.tool_call["name"],
             status="error",
@@ -166,24 +143,9 @@ class LocalizedToolRetryMiddleware(ToolRetryMiddleware):
             return self._to_message(exc, request)
 
 
-@dynamic_prompt
-def user_context_prompt(request: ModelRequest) -> str:
-    """Adds the user's name and locale to the system prompt, and asks the model to reply in that language."""
-    base = request.system_message.text if request.system_message else ""
-    try:
-        user = require_user_context(request.runtime.context)
-    except PermissionError:
-        return base
-    return (
-        f"{base}\n\nCurrent user: {user.display_name}. Locale: {user.locale}. "
-        "Reply in this locale's language."
-    )
-
-
 def orchestrator_middleware() -> list[AgentMiddleware]:
     return [
-        user_context_prompt,
         SafetyMiddleware(),
         BroadnessMiddleware(),
-        LocalizedToolRetryMiddleware(tools=list(RETRIED_TOOLS), max_retries=1, initial_delay=0.2),
+        FriendlyToolRetryMiddleware(tools=list(RETRIED_TOOLS), max_retries=1, initial_delay=0.2),
     ]

@@ -31,8 +31,7 @@
   <text x="76" y="230" fill="#555">Agent loop</text>
 
   <rect x="80" y="242" width="210" height="60" rx="6" fill="#ECECFF" stroke="#9370DB"/>
-  <text x="185" y="264" text-anchor="middle" font-weight="600" fill="#222">model</text>
-  <text x="185" y="287" text-anchor="middle" font-size="13" fill="#6B4E00">wrap_model_call: locale prompt</text>
+  <text x="185" y="277" text-anchor="middle" font-weight="600" fill="#222">model</text>
 
   <rect x="350" y="242" width="210" height="60" rx="6" fill="#ECECFF" stroke="#9370DB"/>
   <text x="455" y="264" text-anchor="middle" font-weight="600" fill="#222">tools</text>

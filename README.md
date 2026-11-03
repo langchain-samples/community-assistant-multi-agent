@@ -14,7 +14,7 @@ Everything external (knowledge base, forum, support cases, training catalog) is 
 
 ![Architecture](docs/img/architecture.svg)
 
-Each run carries the user’s roles, entitlements and locale. This context is passed to
+Each run carries the user’s roles and entitlements. This context is passed to
 every subagent, including the remote ones, and each one applies its own access rules.
 
 ## Choosing how to connect a subagent
@@ -42,11 +42,10 @@ make dev-all             # orchestrator :2024, Support Case :2025, Customer Succ
 The model defaults to Claude. To use another one, set `COMMUNITY_MODEL` to an
 `init_chat_model` string, and set `COMMUNITY_MODEL_BASE_URL` if you go through a gateway.
 The other settings are in `.env.example`. The scenarios have only been tested with Claude,
-so run `make smoke` after switching models.
+so re-run the notebook after switching models.
 
 | Command | What it does |
 |---|---|
-| `make smoke` | runs the scenarios below against the running servers |
 | `make notebook` | re-runs `demo.ipynb` |
 
 ## Scenarios
@@ -62,10 +61,10 @@ so run `make smoke` after switching models.
 6. Training for the products the user owns, over A2A
 7. One question that needs three subagents, which shows up as a single trace
 8. A search that fails once and recovers on retry, and one that keeps failing and returns
-   a localized error
+   a friendly error message
 
 ## Deploying
 
 Each `langgraph.*.json` file is its own LangSmith Deployment. On the orchestrator, set
-`SUPPORT_CASE_URL`, `CUSTOMER_SUCCESS_URL`, `CUSTOMER_SUCCESS_A2A_URL`, `LANGSMITH_API_KEY`
+`SUPPORT_CASE_URL`, `CUSTOMER_SUCCESS_URL`, `LANGSMITH_API_KEY`
 and `CUSTOMER_SUCCESS_API_KEY`.

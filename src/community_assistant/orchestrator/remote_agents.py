@@ -16,7 +16,6 @@ import asyncio
 import logging
 import os
 import uuid
-from typing import Any
 
 import httpx
 from deepagents import CompiledSubAgent
@@ -30,19 +29,13 @@ from langgraph_sdk.errors import NotFoundError
 from langsmith.run_helpers import get_current_run_tree
 
 from community_assistant.context import UserContext, require_user_context
-from community_assistant.localization import failure_message
+from community_assistant.orchestrator.middleware import FAILURE_MESSAGE
 
 logger = logging.getLogger(__name__)
 
 SUPPORT_CASE_URL = os.environ.get("SUPPORT_CASE_URL", "http://127.0.0.1:2025")
 
 _REMOTE_THREAD_NAMESPACE = uuid.UUID("6b1f3c2e-5a4d-4e8b-9c7a-2f0e1d3b4a59")
-_HISTORY_LIMIT = 200  # the server's default page (10) is too short to replay several approvals
-
-
-class RemoteRunIncomplete(RuntimeError):
-    """The remote thread holds a run that stopped before it finished."""
-
 
 def remote_thread_id(parent_thread_id: str, delegation_ns: str) -> str:
     """The Support Case thread for one delegation (one ``task`` call), UUID-shaped."""
@@ -83,17 +76,14 @@ class ContextForwardingRemoteGraph(RemoteGraph):
       stays the same when that task resumes, changes for each later delegation, and differs
       between parallel ``task`` calls. So old history and old approvals never carry over,
       and parallel calls don't share a thread.
-    * Each remote interrupt is raised again in the orchestrator with ``interrupt()``. On
+    * The remote approval is raised again in the orchestrator with ``interrupt()``. On
       resume, ``task`` runs again. The remote thread is still paused, so nothing new is
-      sent, and the user's decision goes to that thread as ``Command(resume=...)``. If the
-      remote agent pauses again (for example, it proposes a new case after a rejection),
-      that approval is raised too. LangGraph matches resume values to ``interrupt()`` calls
-      in order, so each re-run first replays the remote interrupts that were already
-      answered, read from the remote thread's history.
+      sent, and the user's decision goes to that thread as ``Command(resume=...)``.
     * Only messages from the current remote turn are returned.
-    * If a remote thread has nothing pending, its last turn should have finished. If it
-      didn't (the earlier remote run failed partway), this raises ``RemoteRunIncomplete``,
-      so the user gets the localized failure message instead of an empty answer.
+
+This handles one approval per delegation, which is all the demo needs. If the remote
+agent asked for a second approval in the same delegation (say, a new proposal after a
+rejection), that one wouldn't reach the user.
 
     Only ``invoke`` and ``ainvoke`` are overridden, since those are what ``task`` calls.
     Calling ``.stream()`` directly behaves like a normal RemoteGraph.
@@ -114,30 +104,15 @@ class ContextForwardingRemoteGraph(RemoteGraph):
         return cfg, context
 
     @staticmethod
-    def _log(history) -> tuple[list, list, dict | None]:
-        """(answered interrupt values oldest first, pending values, latest state values)."""
-        if not history:
-            return [], [], None
-        pending_ids = {i.id for i in history[0].interrupts}
-        seen, answered = set(), []
-        for snapshot in reversed(history):
-            for i in snapshot.interrupts:
-                if i.id not in seen and i.id not in pending_ids:
-                    seen.add(i.id)
-                    answered.append(i.value)
-        return answered, [i.value for i in history[0].interrupts], history[0].values
-
-    @classmethod
-    def _require_finished(cls, latest) -> None:
-        """Raise unless the remote thread's latest turn ran to the end with a reply."""
-        messages = cls._result(latest.values or {})["messages"]
-        replied = any(m.type == "ai" and m.text.strip() for m in messages)
-        if latest.next or not replied:
-            raise RemoteRunIncomplete(f"remote run stopped before finishing (next={latest.next!r})")
+    def _approval(out: dict):
+        """The remote run's pending approval request, or None."""
+        pending = out.get("__interrupt__") or []
+        return pending[0]["value"] if pending else None
 
     @staticmethod
-    def _pending(out: dict) -> list:
-        return [i["value"] for i in out.get("__interrupt__", [])]
+    def _paused_on(snapshot):
+        """The approval request a remote thread is waiting on, or None."""
+        return snapshot.interrupts[0].value if snapshot and snapshot.interrupts else None
 
     @staticmethod
     def _result(out: dict) -> dict:
@@ -149,41 +124,31 @@ class ContextForwardingRemoteGraph(RemoteGraph):
     def invoke(self, input, config=None, *, context=None, **kwargs):
         cfg, context = self._prepare(config, context)
         try:
-            history = list(self.get_state_history(cfg, limit=_HISTORY_LIMIT))
+            request = self._paused_on(self.get_state(cfg))
         except NotFoundError:  # a new delegation
-            history = []
-        answered, pending, out = self._log(history)
-        if out is None:
+            request = None
+        if request is None:
             out = super().invoke({"messages": input["messages"]}, cfg, context=context, **kwargs)
-            pending = self._pending(out)
-        elif not pending:
-            self._require_finished(history[0])
-        for value in answered:
-            interrupt(value)  # replay: returns the decision already applied remotely
-        while pending:
-            decision = interrupt(pending[0])  # pauses the orchestrator until the user answers
-            out = super().invoke(Command(resume=decision), cfg, context=context, **kwargs)
-            pending = self._pending(out)
+            request = self._approval(out)
+            if request is None:
+                return self._result(out)
+        decision = interrupt(request)  # pauses the orchestrator until the user answers
+        out = super().invoke(Command(resume=decision), cfg, context=context, **kwargs)
         return self._result(out)
 
     async def ainvoke(self, input, config=None, *, context=None, **kwargs):
         cfg, context = self._prepare(config, context)
         try:
-            history = [s async for s in self.aget_state_history(cfg, limit=_HISTORY_LIMIT)]
+            request = self._paused_on(await self.aget_state(cfg))
         except NotFoundError:
-            history = []
-        answered, pending, out = self._log(history)
-        if out is None:
+            request = None
+        if request is None:
             out = await super().ainvoke({"messages": input["messages"]}, cfg, context=context, **kwargs)
-            pending = self._pending(out)
-        elif not pending:
-            self._require_finished(history[0])
-        for value in answered:
-            interrupt(value)
-        while pending:
-            decision = interrupt(pending[0])
-            out = await super().ainvoke(Command(resume=decision), cfg, context=context, **kwargs)
-            pending = self._pending(out)
+            request = self._approval(out)
+            if request is None:
+                return self._result(out)
+        decision = interrupt(request)
+        out = await super().ainvoke(Command(resume=decision), cfg, context=context, **kwargs)
         return self._result(out)
 
 
@@ -213,54 +178,26 @@ def support_case_subagent() -> CompiledSubAgent:
 # ---------------------------------------------------------------------------
 
 CUSTOMER_SUCCESS_URL = os.environ.get("CUSTOMER_SUCCESS_URL", "http://127.0.0.1:2026")
-# Endpoint: ``CUSTOMER_SUCCESS_A2A_URL`` (read on each call) is the agent's full A2A
-# endpoint and is used as is. Set it for a real A2A agent (the URL is in its agent card
-# or docs) or for a non-default assistant on LangSmith Deployment.
-#
-# If it isn't set, we build ``{CUSTOMER_SUCCESS_URL}/a2a/{CUSTOMER_SUCCESS_AGENT_ID}``.
-# That's a shortcut for local dev. The Agent Server addresses A2A agents by assistant
-# UUID, not graph name (``/a2a/customer_success`` is rejected with "Invalid assistant ID:
-# must be a UUID"), and a graph's default assistant ID is the uuid5 of the graph name in
-# the server's graph namespace.
-#
-# Agent card: ``CUSTOMER_SUCCESS_AGENT_CARD_URL`` (read on each call) if it's set,
-# otherwise the per-assistant card at ``{endpoint}/.well-known/agent-card.json``. The
-# Agent Server's root ``/.well-known/agent-card.json`` needs an ``assistant_id`` query
-# parameter, so we don't use it as the default.
+# The Agent Server addresses A2A agents by assistant UUID, not graph name
+# (``/a2a/customer_success`` is rejected with "Invalid assistant ID: must be a UUID"). A
+# graph's default assistant ID is the uuid5 of the graph name in the server's namespace.
 _AGENT_SERVER_GRAPH_NAMESPACE = uuid.UUID("6ba7b821-9dad-11d1-80b4-00c04fd430c8")
 CUSTOMER_SUCCESS_AGENT_ID = str(uuid.uuid5(_AGENT_SERVER_GRAPH_NAMESPACE, "customer_success"))
+A2A_ENDPOINT = f"{CUSTOMER_SUCCESS_URL.rstrip('/')}/a2a/{CUSTOMER_SUCCESS_AGENT_ID}"
 A2A_TIMEOUT = httpx.Timeout(60.0, connect=5.0)  # a remote agent turn can include model calls
-
-_FAILED_TASK_STATES = {
-    *("failed", "rejected", "canceled"),  # A2A spec names
-    *("TASK_STATE_FAILED", "TASK_STATE_REJECTED", "TASK_STATE_CANCELED"),  # v1.0 enum names
-}
-_AGENT_ROLES = {"agent", "ROLE_AGENT"}
 
 
 class A2AError(RuntimeError):
     """The A2A call failed: a network error, a JSON-RPC error, or a reply with no text.
 
     The subagent retries once when this happens. If it fails again, the error comes out of
-    the ``task`` call and the orchestrator's tool middleware turns it into the localized
+    the ``task`` call and the orchestrator's tool middleware turns it into the standard
     failure message.
     """
 
 
 def _http_client() -> httpx.Client:
     return httpx.Client(timeout=A2A_TIMEOUT)
-
-
-def _a2a_endpoint() -> str:
-    if endpoint := os.environ.get("CUSTOMER_SUCCESS_A2A_URL"):
-        return endpoint
-    return f"{CUSTOMER_SUCCESS_URL.rstrip('/')}/a2a/{CUSTOMER_SUCCESS_AGENT_ID}"
-
-
-def _agent_card_url() -> str:
-    if url := os.environ.get("CUSTOMER_SUCCESS_AGENT_CARD_URL"):
-        return url
-    return f"{_a2a_endpoint().rstrip('/')}/.well-known/agent-card.json"
 
 
 def _auth_headers() -> dict[str, str]:
@@ -289,33 +226,14 @@ def _tracing_headers() -> dict[str, str]:
     return run_tree.to_headers() if run_tree is not None else {}
 
 
-def _text(parts) -> str:
-    return "".join(p.get("text", "") for p in parts or () if p.get("kind", "text") == "text")
-
-
 def _reply_text(task: dict) -> str:
-    """Text of the agent's final message in the task.
-
-    A completed task normally has the agent's reply as its artifact (A2A section 3.7).
-    This also handles agents that reply in the status message, only in the history, or
-    with a plain Message instead of a Task.
-    """
-    if task.get("kind") == "message":
-        candidates = [_text(task.get("parts"))]
-    else:
-        status = task.get("status") or {}
-        if status.get("state") in _FAILED_TASK_STATES:
-            raise A2AError(f"remote task ended in state {status.get('state')!r}")
-        candidates = [_text(a.get("parts")) for a in task.get("artifacts") or ()]
-        status_message = status.get("message") or {}
-        if status_message.get("role") in _AGENT_ROLES:
-            candidates.append(_text(status_message.get("parts")))
-        if not any(candidates):
-            history = task.get("history") or ()
-            candidates = [_text(m.get("parts")) for m in history if m.get("role") in _AGENT_ROLES]
-    text = next((t for t in reversed(candidates) if t.strip()), "")
-    if not text:
-        raise A2AError("remote task returned no text")
+    """The reply text of a completed A2A task. The Agent Server puts it in the task's artifacts."""
+    text = "".join(
+        p.get("text", "") for a in task.get("artifacts") or () for p in a.get("parts") or ()
+    )
+    if not text.strip():
+        state = (task.get("status") or {}).get("state")
+        raise A2AError(f"remote task returned no text (state {state!r})")
     return text
 
 
@@ -338,38 +256,26 @@ def _send_message(question: str, user: UserContext) -> str:
     headers = {**_auth_headers(), **_tracing_headers()}
     try:
         with _http_client() as client:
-            response = client.post(_a2a_endpoint(), json=payload, headers=headers)
+            response = client.post(A2A_ENDPOINT, json=payload, headers=headers)
         response.raise_for_status()
         body = response.json()
     except (httpx.HTTPError, ValueError) as exc:  # ValueError: a non-JSON body
         raise A2AError(f"A2A request failed: {exc}") from exc
-    if not isinstance(body, dict):
-        raise A2AError(f"JSON-RPC response is not an object: {type(body).__name__}")
     if "error" in body:
         raise A2AError(f"JSON-RPC error: {body['error']}")
-    result = body.get("result")
-    task = result.get("task", result) if isinstance(result, dict) else result  # some wrap it
-    if not isinstance(task, dict):
-        raise A2AError(f"JSON-RPC result is not a Task or Message: {type(task).__name__}")
-    return _reply_text(task)
-
-
-def ask_customer_success(question: str, context: Any) -> str:
-    """Ask the Customer Success agent over A2A on behalf of the user in ``context``."""
-    try:
-        user = require_user_context(context)
-    except PermissionError:
-        # Without a user we send nothing, and retrying wouldn't help.
-        logger.warning("customer_success called without a user context")
-        return failure_message("en_US")
-    return _send_message(question, user)  # raises A2AError
+    return _reply_text(body["result"])
 
 
 def _delegate(state: dict) -> dict:
     # This runs inside the orchestrator's ``task`` call, so ``get_runtime()`` returns the
     # orchestrator's runtime, which has the user context.
-    question = state["messages"][-1].text
-    return {"messages": [AIMessage(ask_customer_success(question, get_runtime().context))]}
+    try:
+        user = require_user_context(get_runtime().context)
+    except PermissionError:
+        # Without a user we send nothing, and retrying wouldn't help.
+        logger.warning("customer_success called without a user context")
+        return {"messages": [AIMessage(FAILURE_MESSAGE)]}
+    return {"messages": [AIMessage(_send_message(state["messages"][-1].text, user))]}
 
 
 async def _adelegate(state: dict) -> dict:
@@ -393,6 +299,6 @@ def customer_success_subagent() -> CompiledSubAgent:
 def fetch_agent_card() -> dict:
     """Fetch the Customer Success agent card over A2A."""
     with _http_client() as client:
-        response = client.get(_agent_card_url(), headers=_auth_headers())
+        response = client.get(f"{A2A_ENDPOINT}/.well-known/agent-card.json", headers=_auth_headers())
     response.raise_for_status()
     return response.json()

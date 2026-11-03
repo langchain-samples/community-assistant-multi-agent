@@ -18,52 +18,12 @@ KB_CORPUS: list[dict] = [
         "eligibility date, any pending adjustments and the last accrual run.",
     },
     {
-        "id": "KB-003",
-        "title": "Payroll calendars and pay period setup",
-        "url": "https://community.example.com/kb/KB-003",
-        "entitlement": "Payroll",
-        "body": "Payroll calendars define pay periods and pay dates. Create the calendar "
-        "before assigning workers to a pay group.",
-    },
-    {
         "id": "KB-004",
         "title": "Payroll time off accrual payout on termination",
         "url": "https://community.example.com/kb/KB-004",
         "entitlement": "Payroll",
         "body": "Accrued time off can be paid out at termination using a payout earning "
         "code. Payroll-only: requires the Payroll entitlement.",
-    },
-    {
-        "id": "KB-005",
-        "title": "Running a payroll reconciliation report",
-        "url": "https://community.example.com/kb/KB-005",
-        "entitlement": "Payroll",
-        "body": "Use the reconciliation report to compare gross-to-net results between "
-        "two payroll runs and investigate variances.",
-    },
-    {
-        "id": "KB-006",
-        "title": "Business process security basics",
-        "url": "https://community.example.com/kb/KB-006",
-        "entitlement": "HCM",
-        "body": "Security groups control who can initiate and approve business processes. "
-        "Review domain security policies before activating pending changes.",
-    },
-    {
-        "id": "KB-007",
-        "title": "Loading worker data with an integration template",
-        "url": "https://community.example.com/kb/KB-007",
-        "entitlement": "HCM",
-        "body": "Use the worker import template to bulk load hires. Validate the file "
-        "in a sandbox tenant before loading to production.",
-    },
-    {
-        "id": "KB-008",
-        "title": "Understanding earning and deduction codes",
-        "url": "https://community.example.com/kb/KB-008",
-        "entitlement": "Payroll",
-        "body": "Earning and deduction codes drive how pay components are calculated and "
-        "reported on the pay slip.",
     },
     {
         "id": "KB-009",

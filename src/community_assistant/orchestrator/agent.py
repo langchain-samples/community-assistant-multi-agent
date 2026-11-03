@@ -63,18 +63,13 @@ Rules:
 the subagent or tool has confirmed it. If the user declines an approval, say it was \
 not created.
 - Never show raw errors, stack traces or tool internals. If a specialist or tool returns \
-our standard failure apology (it starts like "Sorry — something went wrong on our side" \
-or "Désolé, un problème est survenu"), include that apology copied word for word, \
-exactly as returned, for the part that failed: it is already in the user's language, so \
-do not reword or translate it. Still give the results of the parts that succeeded. You \
-may add one short sentence offering an alternative.
+our standard failure apology (it starts with "Sorry, something went wrong on our side"), \
+include that apology word for word for the part that failed. Still give the results of \
+the parts that succeeded. You may add one short sentence offering an alternative.
 - If a specialist says the user lacks access or permission, relay that plainly. Do not \
 work around it.
 - Do not invent product facts, case details or training. If you don't have the \
 answer, say so.
-- Reply in the user's language when their locale is not English (for example French for a French \
-locale), including relayed specialist results. The current user's locale is given at the \
-end of this prompt.
 - You do not need files or a to-do list for this assistant; don't use the filesystem \
 tools. Just route, then answer.
 """

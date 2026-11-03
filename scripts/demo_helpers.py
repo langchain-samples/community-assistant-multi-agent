@@ -1,4 +1,4 @@
-"""Helpers for driving the live orchestrator (shared by ``smoke_test.py`` and ``demo.ipynb``).
+"""Helpers ``demo.ipynb`` uses to drive the live orchestrator.
 
 Every scenario runs on a fresh thread on the orchestrator server (default
 ``http://127.0.0.1:2024``, override with ``ORCHESTRATOR_URL``), with one of the

@@ -1,4 +1,4 @@
-.PHONY: dev-all dev-orchestrator dev-support-case dev-customer-success smoke notebook
+.PHONY: dev-all dev-orchestrator dev-support-case dev-customer-success notebook
 
 dev-orchestrator:
 	uv run langgraph dev --config langgraph.orchestrator.json --port 2024 --no-browser
@@ -15,9 +15,6 @@ dev-all:
 	uv run langgraph dev --config langgraph.customer_success.json --port 2026 --no-browser & \
 	uv run langgraph dev --config langgraph.orchestrator.json --port 2024 --no-browser & \
 	wait
-
-smoke:
-	uv run python scripts/smoke_test.py
 
 # Re-run demo.ipynb top to bottom against the live servers and save the outputs.
 notebook:
