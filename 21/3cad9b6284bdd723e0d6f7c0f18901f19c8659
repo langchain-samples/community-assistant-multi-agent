@@ -1,0 +1,23 @@
+README.md
+  s_49e87e495cf4de::t_4526405de5f343 51,81
+demo.ipynb
+  s_49e87e495cf4de::t_ffb4f60a884004 10,14,23,27,47,66,81,127,378,504,554,556
+docs/img/architecture.svg
+  s_49e87e495cf4de::t_b928ab3991ec1b 14,16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "213cad9b6284bdd723e0d6f7c0f18901f19c8659",
+  "prompts": {},
+  "sessions": {
+    "s_49e87e495cf4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77a1dc46-c631-44ef-8427-58a1b9019af2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Stephen Chu <stephen.chu@langchain.dev>"
+    }
+  }
+}
