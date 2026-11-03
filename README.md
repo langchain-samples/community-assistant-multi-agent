@@ -7,9 +7,8 @@ This is a small community assistant built with Deep Agents. The main agent (the 
 - `support_case` is a LangGraph agent running on its own server, called with `RemoteGraph`
 - `customer_success` is called over A2A, so it could be built with anything
 
-Safety checks, the clarifying question for vague requests, and tool retries are all
-middleware on the front door. Everything external (knowledge base, forum, support cases,
-training catalog) is mocked.
+Safety checks, the clarifying question for vague requests, and tool retries are all middleware.
+Everything external (knowledge base, forum, support cases, training catalog) is mocked.
 
 ## Architecture
 
