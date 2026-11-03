@@ -9,3 +9,4 @@ __pycache__/
 .langgraph_api/
 .pytest_cache/
 .DS_Store
+.ipynb_checkpoints/
