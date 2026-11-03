@@ -1,10 +1,9 @@
 # Community Assistant: multi-agent reference
 
-This is a small community assistant built with Deep Agents. The main agent (the front
-door) hands work off to four subagents, and each one is built differently:
+This is a small community assistant built with Deep Agents. The main agent (the orchestrator) hands work off to four subagents, and each one is built differently:
 
 - `knowledge` is a LangGraph workflow that runs in the same process
-- `forum_post` is a regular subagent with a prompt and tools, plus an approval step
+- `forum_post` is a regular config-defined subagent with a prompt and tools, plus an approval step
 - `support_case` is a LangGraph agent running on its own server, called with `RemoteGraph`
 - `customer_success` is called over A2A, so it could be built with anything
 
@@ -16,9 +15,8 @@ training catalog) is mocked.
 
 ![Architecture](docs/img/architecture.svg)
 
-Each run gets a `UserContext` with the user's roles, entitlements and locale. The front
-door passes it along to every subagent, including the remote ones, and each subagent
-applies its own access rules.
+Each run carries the user’s roles, entitlements and locale. The front door passes them to
+every subagent, including the remote ones, and each one applies its own access rules.
 
 ## Choosing how to connect a subagent
 
