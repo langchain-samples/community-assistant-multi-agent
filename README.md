@@ -14,7 +14,7 @@ Everything external (knowledge base, forum, support cases, training catalog) is 
 
 ![Architecture](docs/img/architecture.svg)
 
-Each run carries the user’s roles, entitlements and locale. The front door passes them to
+Each run carries the user’s roles, entitlements and locale. This context is passed to
 every subagent, including the remote ones, and each one applies its own access rules.
 
 ## Choosing how to connect a subagent
