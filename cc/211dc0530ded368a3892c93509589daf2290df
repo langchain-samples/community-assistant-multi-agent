@@ -1,0 +1,21 @@
+demo.ipynb
+  s_49e87e495cf4de::t_d8192f373f9176 36-39,137-140,183-186,196,198-199,202,204,206,208,214,239-242,271-274,284,286-288,295,326-329,345-347,349,380-383,393,395-398,400,427-430,447,450,478-481,491,497,512-515,550-553,573,575,600-603,613,617,620-624,626,632-639,658,667-670,682,700-703,715,743-746
+src/community_assistant/orchestrator/middleware.py
+  s_49e87e495cf4de::t_5cf139b1ff964a 7,17-24,110-113,120-125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc211dc0530ded368a3892c93509589daf2290df",
+  "prompts": {},
+  "sessions": {
+    "s_49e87e495cf4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77a1dc46-c631-44ef-8427-58a1b9019af2",
+        "model": "unknown"
+      },
+      "human_author": "Stephen Chu <stephen.chu@langchain.dev>"
+    }
+  }
+}
