@@ -29,21 +29,6 @@ every subagent, including the remote ones, and each one applies its own access r
 The first three keep threads and approvals across the boundary. A2A is one message in and
 one reply out.
 
-## Notes
-
-- `RemoteGraph` doesn't forward the runtime context for you. `ContextForwardingRemoteGraph`
-  in `front_door/remote_agents.py` sends it explicitly. It also gives each delegation its
-  own remote thread, which is what lets an approval on the remote side be resumed.
-- The Agent Server's A2A endpoint expects an assistant UUID, not the graph name. Set
-  `CUSTOMER_SUCCESS_A2A_URL` to the full endpoint.
-- The remote servers use `make_graph` from `tracing.py` so their runs show up inside the
-  caller's trace in LangSmith.
-- Only tools that are safe to call twice get retried. The `task` tool isn't one of them,
-  because retrying it would re-run the whole subagent. `customer_success` retries its A2A
-  call itself.
-- User identity is passed in, not authenticated. In production you'd use Agent Server
-  custom auth.
-
 ## Running it
 
 You'll need Python 3.11+ and [`uv`](https://docs.astral.sh/uv/).
