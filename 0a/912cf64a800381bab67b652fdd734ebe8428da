@@ -1,0 +1,19 @@
+docs/img/architecture.svg
+  s_49e87e495cf4de::t_1f9f391822ecb7 1,7,12,15,19-27,30-31,33-35,37-39,41,44-50,53-58,61-63,66,69-70,72-74,76-78,80-82,84-86,89-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0a912cf64a800381bab67b652fdd734ebe8428da",
+  "prompts": {},
+  "sessions": {
+    "s_49e87e495cf4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77a1dc46-c631-44ef-8427-58a1b9019af2",
+        "model": "unknown"
+      },
+      "human_author": "Stephen Chu <stephen.chu@langchain.dev>"
+    }
+  }
+}
