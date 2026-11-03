@@ -41,7 +41,8 @@ make dev-all             # orchestrator :2024, Support Case :2025, Customer Succ
 
 The model defaults to Claude. To use another one, set `COMMUNITY_MODEL` to an
 `init_chat_model` string, and set `COMMUNITY_MODEL_BASE_URL` if you go through a gateway.
-The other settings are in `.env.example`.
+The other settings are in `.env.example`. The scenarios have only been tested with Claude,
+so run `make smoke` after switching models.
 
 | Command | What it does |
 |---|---|
