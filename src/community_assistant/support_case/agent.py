@@ -10,10 +10,8 @@ from __future__ import annotations
 import copy
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import AgentMiddleware, HumanInTheLoopMiddleware
 from langchain.tools import ToolRuntime, tool
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import SystemMessage
 
 from community_assistant.context import UserContext, require_user_context
 from community_assistant.mock_data import CASES
@@ -22,12 +20,6 @@ from community_assistant.tracing import continue_caller_trace
 
 DENIED_COPY = (
     "You don't have permission to create support cases. Ask your Acme admin for access."
-)
-
-# Told to the model when create_case is hidden from a user without the role.
-NO_CREATE_NOTE = (
-    "This user does not have permission to create support cases. If they ask to open one, "
-    f'reply with exactly: "{DENIED_COPY}"'
 )
 
 # Mock case store: the starting cases plus any created while the server runs.
@@ -56,7 +48,7 @@ def get_case_status(case_id: str, runtime: ToolRuntime[UserContext]) -> str:
 def create_case(
     subject: str, description: str, product: str, runtime: ToolRuntime[UserContext]
 ) -> str:
-    """Open a new support case for the current user. Requires user approval."""
+    """Open a new support case for the current user. Requires the can_create_case role."""
     global _next_case_number
     try:
         user = require_user_context(runtime.context)
@@ -79,43 +71,11 @@ def create_case(
     return f"Created support case {case_id}: {subject}"
 
 
-def _can_create(context) -> bool:
-    try:
-        return "can_create_case" in require_user_context(context).roles
-    except PermissionError:
-        return False
-
-
-class RoleBasedToolAccess(AgentMiddleware):
-    """Only offers ``create_case`` to users who are allowed to use it.
-
-    The approval interrupt happens right after the model responds, before the tool runs.
-    Without this middleware, a user without the role would be asked to approve a call that
-    then gets denied. With the tool hidden, they just get a refusal and no approval prompt.
-    ``create_case`` still checks the role itself as a backup.
-    """
-
-    def _filter(self, request):
-        if _can_create(request.runtime.context):
-            return request
-        tools = [t for t in request.tools if getattr(t, "name", None) != "create_case"]
-        # Say why the tool is missing, or the model just reports it "can't" create cases.
-        base = request.system_message.content if request.system_message else ""
-        note = f"{base}\n\n{NO_CREATE_NOTE}" if base else NO_CREATE_NOTE
-        return request.override(tools=tools, system_message=SystemMessage(content=note))
-
-    def wrap_model_call(self, request, handler):
-        return handler(self._filter(request))
-
-    async def awrap_model_call(self, request, handler):
-        return await handler(self._filter(request))
-
-
 SYSTEM_PROMPT = (
     "You are the Acme Support Case assistant. You can look up the status of the "
     "user's own support cases with get_case_status and open new ones with create_case. "
     "Before calling create_case, make sure you have a subject, a description and the "
-    "product; ask for anything missing. The user is asked to approve every new case. "
+    "product; ask for anything missing. "
     "If a tool says the user lacks permission or the case isn't found, relay that "
     "plainly without guessing or working around it. Be concise."
 )
@@ -128,12 +88,6 @@ def build_support_case_agent(model: BaseChatModel | None = None, checkpointer=No
         tools=[get_case_status, create_case],
         system_prompt=SYSTEM_PROMPT,
         context_schema=UserContext,
-        middleware=[
-            RoleBasedToolAccess(),
-            HumanInTheLoopMiddleware(
-                interrupt_on={"create_case": {"allowed_decisions": ["approve", "reject"]}}
-            )
-        ],
         checkpointer=checkpointer,
         name="support_case",
     )

@@ -21,11 +21,8 @@ import httpx
 from deepagents import CompiledSubAgent
 from langchain_core.messages import AIMessage, convert_to_messages
 from langchain_core.runnables import RunnableLambda
-from langgraph.config import get_config
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.runtime import get_runtime
-from langgraph.types import Command, interrupt
-from langgraph_sdk.errors import NotFoundError
 from langsmith.run_helpers import get_current_run_tree
 
 from community_assistant.context import UserContext, require_user_context
@@ -35,133 +32,41 @@ logger = logging.getLogger(__name__)
 
 SUPPORT_CASE_URL = os.environ.get("SUPPORT_CASE_URL", "http://127.0.0.1:2025")
 
-_REMOTE_THREAD_NAMESPACE = uuid.UUID("6b1f3c2e-5a4d-4e8b-9c7a-2f0e1d3b4a59")
-
-def remote_thread_id(parent_thread_id: str, delegation_ns: str) -> str:
-    """The Support Case thread for one delegation (one ``task`` call), UUID-shaped."""
-    key = f"{parent_thread_id}|{delegation_ns}|support_case"
-    return str(uuid.uuid5(_REMOTE_THREAD_NAMESPACE, key))
-
-
-# ---------------------------------------------------------------------------
-# Support Case: RemoteGraph
-# ---------------------------------------------------------------------------
+SUPPORT_CASE = RemoteGraph(
+    "support_case",
+    url=SUPPORT_CASE_URL,
+    api_key=os.environ.get("LANGSMITH_API_KEY"),
+    distributed_tracing=True,
+)
 
 
-def _ambient_config() -> dict:
-    try:
-        return get_config()
-    except RuntimeError:  # called outside a graph run
-        return {}
+async def _call_support_case(state: dict) -> dict:
+    """Send the delegated request to Support Case and return its reply.
 
+    A plain RemoteGraph doesn't fit the task tool on its own, so this does three things:
 
-class ContextForwardingRemoteGraph(RemoteGraph):
-    """A RemoteGraph that passes the user's identity and approvals across the network.
-
-    Identity: the runtime context doesn't cross the network by itself. The ``task`` tool
-    calls ``invoke(state, config)`` without ``context``, so the remote run wouldn't know
-    who the user is. This class sends the user context explicitly, and the remote server
-    applies its own access rules to it. The Agent Server rejects a request that has both
-    ``configurable`` and ``context``, so the ``configurable`` keys from ``task`` are moved
-    into metadata.
-
-    Approvals: with a plain RemoteGraph as the subagent, the remote ``create_case`` approval
-    couldn't make it back through ``task``. ``task`` passes no ``thread_id``, so the remote
-    run has no thread, and no ``checkpoint_ns``, so RemoteGraph returns the remote interrupt
-    as data instead of raising it. Resuming would then send a new message rather than
-    ``Command(resume)``. So this class manages the remote thread itself:
-
-    * Each delegation gets its own remote thread, based on the parent ``thread_id`` and the
-      ``checkpoint_ns`` of the ``task`` call (``tools:<task id>``). We checked that the ns
-      stays the same when that task resumes, changes for each later delegation, and differs
-      between parallel ``task`` calls. So old history and old approvals never carry over,
-      and parallel calls don't share a thread.
-    * The remote approval is raised again in the orchestrator with ``interrupt()``. On
-      resume, ``task`` runs again. The remote thread is still paused, so nothing new is
-      sent, and the user's decision goes to that thread as ``Command(resume=...)``.
-    * Only messages from the current remote turn are returned.
-
-This handles one approval per delegation, which is all the demo needs. If the remote
-agent asked for a second approval in the same delegation (say, a new proposal after a
-rejection), that one wouldn't reach the user.
-
-    Only ``invoke`` and ``ainvoke`` are overridden, since those are what ``task`` calls.
-    Calling ``.stream()`` directly behaves like a normal RemoteGraph.
+    * Sends the user's identity. The orchestrator's runtime context doesn't cross the
+      network by itself, and Support Case checks the user's role.
+    * Builds a clean config with a new remote thread. Otherwise the orchestrator's own
+      config (including its thread_id) would be forwarded, and the Agent Server rejects
+      a request that has both ``configurable`` and ``context``.
+    * Converts the reply. RemoteGraph returns messages as plain dicts, and task only
+      reads message objects (deepagents#6126).
     """
-
-    def _prepare(self, config, context):
-        parent = _ambient_config().get("configurable", {})
-        meta = {**(config or {}).get("configurable", {}), **(config or {}).get("metadata", {})}
-        if parent.get("thread_id"):
-            meta["orchestrator_thread_id"] = parent["thread_id"]  # also lands on the remote thread
-            thread_id = remote_thread_id(parent["thread_id"], parent.get("checkpoint_ns", ""))
-        else:
-            thread_id = str(uuid.uuid4())
-        # configurable keeps only thread_id, which RemoteGraph pops into the request URL.
-        cfg = {"metadata": meta, "configurable": {"thread_id": thread_id}}
-        if context is None:
-            context = require_user_context(get_runtime().context).to_dict()
-        return cfg, context
-
-    @staticmethod
-    def _approval(out: dict):
-        """The remote run's pending approval request, or None."""
-        pending = out.get("__interrupt__") or []
-        return pending[0]["value"] if pending else None
-
-    @staticmethod
-    def _paused_on(snapshot):
-        """The approval request a remote thread is waiting on, or None."""
-        return snapshot.interrupts[0].value if snapshot and snapshot.interrupts else None
-
-    @staticmethod
-    def _result(out: dict) -> dict:
-        # Only return this turn's messages. The rest of the remote state stays on the remote side.
-        messages = convert_to_messages(out.get("messages", []))
-        humans = [n for n, m in enumerate(messages) if m.type == "human"]
-        return {"messages": messages[humans[-1] + 1 :] if humans else messages}
-
-    def invoke(self, input, config=None, *, context=None, **kwargs):
-        cfg, context = self._prepare(config, context)
-        try:
-            request = self._paused_on(self.get_state(cfg))
-        except NotFoundError:  # a new delegation
-            request = None
-        if request is None:
-            out = super().invoke({"messages": input["messages"]}, cfg, context=context, **kwargs)
-            request = self._approval(out)
-            if request is None:
-                return self._result(out)
-        decision = interrupt(request)  # pauses the orchestrator until the user answers
-        out = super().invoke(Command(resume=decision), cfg, context=context, **kwargs)
-        return self._result(out)
-
-    async def ainvoke(self, input, config=None, *, context=None, **kwargs):
-        cfg, context = self._prepare(config, context)
-        try:
-            request = self._paused_on(await self.aget_state(cfg))
-        except NotFoundError:
-            request = None
-        if request is None:
-            out = await super().ainvoke({"messages": input["messages"]}, cfg, context=context, **kwargs)
-            request = self._approval(out)
-            if request is None:
-                return self._result(out)
-        decision = interrupt(request)
-        out = await super().ainvoke(Command(resume=decision), cfg, context=context, **kwargs)
-        return self._result(out)
+    user = require_user_context(get_runtime().context)
+    out = await SUPPORT_CASE.ainvoke(
+        {"messages": state["messages"]},
+        {"configurable": {"thread_id": str(uuid.uuid4())}},
+        context=user.to_dict(),
+    )
+    return {"messages": convert_to_messages(out["messages"])}
 
 
 def support_case_subagent() -> CompiledSubAgent:
     return {
         "name": "support_case",
         "description": "Support team's agent (separate deployment). Looks up case status and creates support cases.",
-        "runnable": ContextForwardingRemoteGraph(
-            "support_case",
-            url=SUPPORT_CASE_URL,
-            api_key=os.environ.get("LANGSMITH_API_KEY"),
-            distributed_tracing=True,
-        ),
+        "runnable": RunnableLambda(_call_support_case, name="support_case"),
     }
 
 

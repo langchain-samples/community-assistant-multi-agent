@@ -26,7 +26,7 @@ every subagent, including the remote ones, and each one applies its own access r
 | `RemoteGraph` | `support_case` | another team's Agent Server | another team owns it, and they also use LangGraph |
 | A2A | `customer_success` | anywhere, on any stack | another team or vendor owns it, and you can't count on LangGraph |
 
-The first three keep threads and approvals across the boundary. A2A is one message in and
+The first three are LangGraph runs with threads you can inspect. A2A is one message in and
 one reply out.
 
 ## Running it
@@ -77,8 +77,8 @@ You can also open each server in LangGraph Studio, for example
 2. A vague question ("Tell me about payroll"), which gets a clarifying question first
 3. An unsafe request, refused by the safety middleware
 4. A forum post, which the user approves before it's posted
-5. Opening a support case: the remote agent asks for approval, and a user without the
-   right role is turned down
+5. Opening a support case on another team's server: a user with the right role gets a case,
+   and a user without it is turned down
 6. Training for the products the user owns, over A2A
 7. One question that needs three subagents, which shows up as a single trace
 8. A search that fails once and recovers on retry, and one that keeps failing and returns
