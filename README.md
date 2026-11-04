@@ -77,8 +77,7 @@ You can also open each server in LangGraph Studio, for example
 2. A vague question ("Tell me about payroll"), which gets a clarifying question first
 3. An unsafe request, refused by the safety middleware
 4. A forum post, which the user approves before it's posted
-5. Opening a support case on another team's server: a user with the right role gets a case,
-   and a user without it is turned down
+5. Opening a support case on another team's server, which checks the user's role first
 6. Training for the products the user owns, over A2A
 7. One question that needs three subagents, which shows up as a single trace
 8. A search that fails once and recovers on retry, and one that keeps failing and returns

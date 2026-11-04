@@ -42,22 +42,14 @@ class UserContext:
             raise PermissionError(f"malformed user context: {exc!r}") from exc
 
 
-DEMO_USERS: dict[str, UserContext] = {
-    "admin_customer": UserContext(
-        user_id="u-1001",
-        display_name="Alex Morgan",
-        roles=("customer", "can_create_case"),
-        entitlements=("HCM", "Payroll"),
-        purchased_products=("Acme HCM", "Acme Payroll"),
-    ),
-    "partner_readonly": UserContext(
-        user_id="u-2002",
-        display_name="Sam Rivera",
-        roles=("partner",),
-        entitlements=("HCM",),
-        purchased_products=("Acme HCM",),
-    ),
-}
+# The user every demo request runs as. In production this comes from the user's login.
+DEMO_USER = UserContext(
+    user_id="u-1001",
+    display_name="Alex Morgan",
+    roles=("customer", "can_create_case"),
+    entitlements=("HCM", "Payroll"),
+    purchased_products=("Acme HCM", "Acme Payroll"),
+)
 
 
 def require_user_context(runtime_context: UserContext | dict | None) -> UserContext:
