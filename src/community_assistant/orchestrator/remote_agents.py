@@ -36,24 +36,16 @@ SUPPORT_CASE = RemoteGraph(
 
 
 async def _call_support_case(state: dict) -> dict:
-    """Send the delegated request to Support Case and return its reply.
-
-    A plain RemoteGraph doesn't fit the task tool on its own, so this does three things:
-
-    * Sends the user's identity. The orchestrator's runtime context doesn't cross the
-      network by itself, and Support Case checks the user's role.
-    * Builds a clean config with a new remote thread. Otherwise the orchestrator's own
-      config (including its thread_id) would be forwarded, and the Agent Server rejects
-      a request that has both ``configurable`` and ``context``.
-    * Converts the reply. RemoteGraph returns messages as plain dicts, and task only
-      reads message objects (deepagents#6126).
-    """
+    """Send the delegated request to the Support Case server and return its reply."""
+    # Who the user is. The orchestrator's context doesn't cross the network on its own.
     user = require_user_context(get_runtime().context)
     out = await SUPPORT_CASE.ainvoke(
         {"messages": state["messages"]},
+        # A fresh remote thread for this request, rather than the orchestrator's own config.
         {"configurable": {"thread_id": str(uuid.uuid4())}},
         context=user.to_dict(),
     )
+    # RemoteGraph returns plain dicts; task needs message objects (deepagents#6126).
     return {"messages": convert_to_messages(out["messages"])}
 
 
