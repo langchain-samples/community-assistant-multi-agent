@@ -1,0 +1,25 @@
+README.md
+  s_49e87e495cf4de::t_cc99474e9b868f 80
+demo.ipynb
+  s_49e87e495cf4de::t_3531b7027aef6b 31,40-43,53,63,69-70,76,78,87,117,136-139,357-360,403-406,416,418-422,424-426,428,439,459-462,653-656,675,685-688,698-700,708,741-744,907-910,926-928,930,960-963,973,975-976,992,1001-1004,1106-1128,1130,1156-1178,1180,1205-1229,1238,1240-1242,1251-1254,1270,1276,1292,1296-1299,1517,1521-1524,1544,1549,1565,1569-1572,1583,1586,1589-1593,1595-1600,1606,1629,1633-1636,1648,1655,1662,1666-1669,1705,1709-1712,1727
+src/community_assistant/context.py
+  s_49e87e495cf4de::t_f0002ab98936c5 45-52
+src/community_assistant/mock_data.py
+  s_49e87e495cf4de::t_b9ebb7f51aa52c 43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a9246a216aba70a25baa4c522f8b6e9d88c7c3eb",
+  "prompts": {},
+  "sessions": {
+    "s_49e87e495cf4de": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77a1dc46-c631-44ef-8427-58a1b9019af2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Stephen Chu <stephen.chu@langchain.dev>"
+    }
+  }
+}
