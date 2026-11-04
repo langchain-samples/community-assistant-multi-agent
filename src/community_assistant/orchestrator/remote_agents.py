@@ -3,8 +3,7 @@
 * Support Case runs on its own Agent Server (``langgraph.support_case.json``) and is
   called with ``RemoteGraph``. To move it to LangSmith Deployment you only need to set
   ``SUPPORT_CASE_URL`` and ``LANGSMITH_API_KEY``.
-* Customer Success is only called over A2A (``customer_success_subagent`` and
-  ``fetch_agent_card``), so it could be any agent that supports A2A.
+* Customer Success is only called over A2A, so it could be any agent that supports A2A.
 
 The orchestrator calls both through ``task``, like any local subagent. Only the runnable
 behind each one knows how to reach it.
@@ -12,8 +11,6 @@ behind each one knows how to reach it.
 
 from __future__ import annotations
 
-import asyncio
-import logging
 import os
 import uuid
 
@@ -25,10 +22,8 @@ from langgraph.pregel.remote import RemoteGraph
 from langgraph.runtime import get_runtime
 from langsmith.run_helpers import get_current_run_tree
 
-from community_assistant.context import UserContext, require_user_context
-from community_assistant.orchestrator.middleware import FAILURE_MESSAGE
+from community_assistant.context import require_user_context
 
-logger = logging.getLogger(__name__)
 
 SUPPORT_CASE_URL = os.environ.get("SUPPORT_CASE_URL", "http://127.0.0.1:2025")
 
@@ -72,79 +67,30 @@ def support_case_subagent() -> CompiledSubAgent:
 
 # ---------------------------------------------------------------------------
 # Customer Success: A2A
-#
-# A2A JSON-RPC ``message/send`` over HTTP, so the remote side can be any agent that
-# supports A2A. The user context is sent in two places:
-#
-# * ``message.metadata["user_context"]``: standard A2A, so any agent can read it.
-# * ``params.context``: an Agent Server addition that isn't in the A2A spec. The Agent
-#   Server turns it into the run's context, so the remote tools see it as
-#   ``runtime.context``. Other A2A agents ignore it.
 # ---------------------------------------------------------------------------
 
 CUSTOMER_SUCCESS_URL = os.environ.get("CUSTOMER_SUCCESS_URL", "http://127.0.0.1:2026")
-# The Agent Server addresses A2A agents by assistant UUID, not graph name
-# (``/a2a/customer_success`` is rejected with "Invalid assistant ID: must be a UUID"). A
-# graph's default assistant ID is the uuid5 of the graph name in the server's namespace.
+# The Agent Server addresses A2A agents by assistant ID, not graph name. A graph's default
+# assistant ID is the uuid5 of the graph name in the server's namespace.
 _AGENT_SERVER_GRAPH_NAMESPACE = uuid.UUID("6ba7b821-9dad-11d1-80b4-00c04fd430c8")
 CUSTOMER_SUCCESS_AGENT_ID = str(uuid.uuid5(_AGENT_SERVER_GRAPH_NAMESPACE, "customer_success"))
 A2A_ENDPOINT = f"{CUSTOMER_SUCCESS_URL.rstrip('/')}/a2a/{CUSTOMER_SUCCESS_AGENT_ID}"
-A2A_TIMEOUT = httpx.Timeout(60.0, connect=5.0)  # a remote agent turn can include model calls
 
 
-class A2AError(RuntimeError):
-    """The A2A call failed: a network error, a JSON-RPC error, or a reply with no text.
-
-    The subagent retries once when this happens. If it fails again, the error comes out of
-    the ``task`` call and the orchestrator's tool middleware turns it into the standard
-    failure message.
-    """
-
-
-def _http_client() -> httpx.Client:
-    return httpx.Client(timeout=A2A_TIMEOUT)
+def _headers() -> dict[str, str]:
+    """An API key if CUSTOMER_SUCCESS_API_KEY is set, plus LangSmith trace headers."""
+    headers = {}
+    if key := os.environ.get("CUSTOMER_SUCCESS_API_KEY"):
+        headers["x-api-key"] = key
+    if run := get_current_run_tree():
+        headers.update(run.to_headers())
+    return headers
 
 
-def _auth_headers() -> dict[str, str]:
-    """``x-api-key`` for the Customer Success endpoint, only if ``CUSTOMER_SUCCESS_API_KEY`` is set.
-
-    This doesn't fall back to LANGSMITH_API_KEY on purpose. The A2A endpoint might belong
-    to a third party, and a key shouldn't be sent somewhere it wasn't meant for.
-    """
-    key = os.environ.get("CUSTOMER_SUCCESS_API_KEY")
-    return {"x-api-key": key} if key else {}
-
-
-def _tracing_headers() -> dict[str, str]:
-    """LangSmith distributed tracing headers for the current run, if there is one.
-
-    The Agent Server copies ``langsmith-trace`` (and ``baggage``) from A2A requests into
-    the run's config, the same as on its other run endpoints. The remote graph uses them
-    to continue our trace (see ``community_assistant.tracing``), so the remote run shows
-    up under this call in LangSmith. Other A2A agents ignore headers they don't recognize.
-
-    These headers go to whatever endpoint is configured. The trace ID isn't secret, but
-    ``baggage`` includes your LangSmith project name, so drop these headers if the A2A
-    agent belongs to a third party that shouldn't see it.
-    """
-    run_tree = get_current_run_tree()
-    return run_tree.to_headers() if run_tree is not None else {}
-
-
-def _reply_text(task: dict) -> str:
-    """The reply text of a completed A2A task. The Agent Server puts it in the task's artifacts."""
-    text = "".join(
-        p.get("text", "") for a in task.get("artifacts") or () for p in a.get("parts") or ()
-    )
-    if not text.strip():
-        state = (task.get("status") or {}).get("state")
-        raise A2AError(f"remote task returned no text (state {state!r})")
-    return text
-
-
-def _send_message(question: str, user: UserContext) -> str:
-    """Send one A2A ``message/send`` and return the reply text. Raises ``A2AError``."""
-    payload = {
+async def _call_customer_success(state: dict) -> dict:
+    """Send the delegated request to Customer Success as one A2A message and return its reply."""
+    user = require_user_context(get_runtime().context)
+    request = {
         "jsonrpc": "2.0",
         "id": str(uuid.uuid4()),
         "method": "message/send",
@@ -152,39 +98,23 @@ def _send_message(question: str, user: UserContext) -> str:
             "message": {
                 "role": "user",
                 "messageId": str(uuid.uuid4()),
-                "parts": [{"kind": "text", "text": question}],
-                "metadata": {"user_context": user.to_dict()},
+                "parts": [{"kind": "text", "text": state["messages"][-1].text}],
+                "metadata": {"user_context": user.to_dict()},  # standard A2A: any agent can read it
             },
-            "context": user.to_dict(),  # Agent Server extension -> runtime.context
+            "context": user.to_dict(),  # Agent Server addition: becomes the remote runtime.context
         },
     }
-    headers = {**_auth_headers(), **_tracing_headers()}
-    try:
-        with _http_client() as client:
-            response = client.post(A2A_ENDPOINT, json=payload, headers=headers)
-        response.raise_for_status()
-        body = response.json()
-    except (httpx.HTTPError, ValueError) as exc:  # ValueError: a non-JSON body
-        raise A2AError(f"A2A request failed: {exc}") from exc
+    async with httpx.AsyncClient(timeout=60) as client:
+        response = await client.post(A2A_ENDPOINT, json=request, headers=_headers())
+    response.raise_for_status()
+    body = response.json()
     if "error" in body:
-        raise A2AError(f"JSON-RPC error: {body['error']}")
-    return _reply_text(body["result"])
-
-
-def _delegate(state: dict) -> dict:
-    # This runs inside the orchestrator's ``task`` call, so ``get_runtime()`` returns the
-    # orchestrator's runtime, which has the user context.
-    try:
-        user = require_user_context(get_runtime().context)
-    except PermissionError:
-        # Without a user we send nothing, and retrying wouldn't help.
-        logger.warning("customer_success called without a user context")
-        return {"messages": [AIMessage(FAILURE_MESSAGE)]}
-    return {"messages": [AIMessage(_send_message(state["messages"][-1].text, user))]}
-
-
-async def _adelegate(state: dict) -> dict:
-    return await asyncio.to_thread(_delegate, state)  # copies the context, so get_runtime() works
+        raise RuntimeError(f"A2A error: {body['error']}")
+    task = body["result"]  # an A2A task; the reply is in its artifacts
+    reply = "".join(p.get("text", "") for a in task.get("artifacts", []) for p in a["parts"])
+    if not reply.strip():
+        raise RuntimeError(f"A2A task returned no reply (state {task.get('status', {}).get('state')!r})")
+    return {"messages": [AIMessage(reply)]}
 
 
 def customer_success_subagent() -> CompiledSubAgent:
@@ -195,15 +125,12 @@ def customer_success_subagent() -> CompiledSubAgent:
             "about training and enablement for the user's purchased products. Pass a "
             "self-contained question."
         ),
-        "runnable": RunnableLambda(_delegate, afunc=_adelegate, name="customer_success").with_retry(
-            retry_if_exception_type=(A2AError,), stop_after_attempt=2, wait_exponential_jitter=False
-        ),
+        "runnable": RunnableLambda(_call_customer_success, name="customer_success"),
     }
 
 
 def fetch_agent_card() -> dict:
-    """Fetch the Customer Success agent card over A2A."""
-    with _http_client() as client:
-        response = client.get(f"{A2A_ENDPOINT}/.well-known/agent-card.json", headers=_auth_headers())
+    """Fetch the Customer Success agent card, the standard A2A description of the agent."""
+    response = httpx.get(f"{A2A_ENDPOINT}/.well-known/agent-card.json", headers=_headers(), timeout=10)
     response.raise_for_status()
     return response.json()
