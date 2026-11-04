@@ -6,7 +6,7 @@ In a single flat graph, these checks are usually separate nodes. Here they're mi
 * ``broadness_check`` and its follow-up become ``BroadnessMiddleware``, which uses ``interrupt``
 * retry-once-then-error becomes the built-in ``ToolRetryMiddleware`` and ``ToolErrorMiddleware``
 
-Pass ``orchestrator_middleware()`` to ``create_deep_agent(middleware=...)``.
+The orchestrator's middleware list is in ``agent.py``.
 """
 
 from __future__ import annotations
@@ -14,12 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langchain.agents.middleware import (
-    AgentMiddleware,
-    ToolErrorMiddleware,
-    ToolRetryMiddleware,
-    hook_config,
-)
+from langchain.agents.middleware import AgentMiddleware, hook_config
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import interrupt
 
@@ -111,16 +106,3 @@ def friendly_tool_error(exc: Exception, request: Any) -> str:
     """Log a tool's final error and give the model ``FAILURE_MESSAGE`` instead of the raw error."""
     logger.exception("tool call failed", exc_info=exc)
     return FAILURE_MESSAGE
-
-
-def orchestrator_middleware() -> list[AgentMiddleware]:
-    return [
-        SafetyMiddleware(),
-        BroadnessMiddleware(),
-        # Outer: any tool's error, including a failed ``task`` call, becomes FAILURE_MESSAGE.
-        ToolErrorMiddleware(on_error=friendly_tool_error),
-        # Inner: retry the safe tools once, then pass the error out to ToolErrorMiddleware.
-        ToolRetryMiddleware(
-            tools=list(RETRIED_TOOLS), max_retries=1, initial_delay=0.2, on_failure="error"
-        ),
-    ]

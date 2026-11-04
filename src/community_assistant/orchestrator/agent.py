@@ -9,13 +9,14 @@ same way, through ``task``, but each is built differently:
 * ``customer_success``: another team's agent, which could be on any stack (A2A)
 
 Safety checks, clarifying questions and retries are handled by middleware
-(``orchestrator_middleware``), not by the prompt.
+(see ``middleware.py``), not by the prompt.
 """
 
 from __future__ import annotations
 
 from deepagents import create_deep_agent
 from deepagents.middleware.filesystem import FilesystemMiddleware
+from langchain.agents.middleware import ToolErrorMiddleware, ToolRetryMiddleware
 from langchain_core.language_models import BaseChatModel
 from langgraph.graph.state import CompiledStateGraph
 
@@ -23,7 +24,12 @@ from community_assistant.context import UserContext
 from community_assistant.orchestrator.demo_tools import flaky_community_search
 from community_assistant.orchestrator.forum import forum_subagent
 from community_assistant.orchestrator.knowledge import knowledge_subagent
-from community_assistant.orchestrator.middleware import orchestrator_middleware
+from community_assistant.orchestrator.middleware import (
+    RETRIED_TOOLS,
+    BroadnessMiddleware,
+    SafetyMiddleware,
+    friendly_tool_error,
+)
 from community_assistant.orchestrator.remote_agents import (
     customer_success_subagent,
     support_case_subagent,
@@ -88,7 +94,14 @@ def build_orchestrator(
             # Deep Agents adds file tools by default. This assistant doesn't use them, so keep
             # only read_file, which FilesystemMiddleware requires.
             FilesystemMiddleware(tools=["read_file"]),
-            *orchestrator_middleware(),
+            SafetyMiddleware(),
+            BroadnessMiddleware(),
+            # Outer: any tool's error, including a failed ``task`` call, becomes the failure message.
+            ToolErrorMiddleware(on_error=friendly_tool_error),
+            # Inner: retry the safe tools once, then pass the error out to ToolErrorMiddleware.
+            ToolRetryMiddleware(
+                tools=list(RETRIED_TOOLS), max_retries=1, initial_delay=0.2, on_failure="error"
+            ),
         ],
         subagents=[
             knowledge_subagent,
